@@ -1,0 +1,6 @@
+{
+  "name": "XvirorSMM",
+  "description": "A complete, production-grade Social Media Marketing platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

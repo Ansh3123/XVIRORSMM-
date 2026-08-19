@@ -1,0 +1,147 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'balance', 'totalSpent', 'createdAt', 'updatedAt'])
+        && data.email is string && data.email.size() <= 255
+        && data.role is string && (data.role == 'user' || data.role == 'admin')
+        && data.balance is number && data.balance >= 0
+        && data.totalSpent is number && data.totalSpent >= 0
+        && data.createdAt is number
+        && data.updatedAt is number
+        && (!('adminSecret' in data.keys()) || data.adminSecret is string)
+        && (!('lastReadAt' in data.keys()) || data.lastReadAt is number);
+    }
+
+    function isValidService(data) {
+      return data.keys().hasAll(['platform', 'category', 'name', 'price', 'minOrder', 'maxOrder', 'status', 'createdAt', 'updatedAt'])
+        && data.platform is string && data.platform.size() <= 50
+        && data.category is string && data.category.size() <= 100
+        && data.name is string && data.name.size() <= 200
+        && ( !('description' in data.keys()) || (data.description is string && data.description.size() <= 2000) )
+        && data.price is number && data.price >= 0
+        && data.minOrder is number && data.minOrder >= 1
+        && data.maxOrder is number && data.maxOrder >= 1
+        && data.status is string && (data.status == 'active' || data.status == 'inactive')
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['userId', 'serviceId', 'link', 'quantity', 'charge', 'status', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
+        && data.serviceId is string && data.serviceId.size() <= 128
+        && data.link is string && data.link.size() <= 1024
+        && data.quantity is number && data.quantity >= 1
+        && data.charge is number && data.charge >= 0
+        && data.status is string && data.status.size() <= 30
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'amount', 'type', 'status', 'createdAt'])
+        && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
+        && data.amount is number
+        && data.type is string && (data.type == 'deposit' || data.type == 'refund' || data.type == 'charge')
+        && data.status is string && (data.status == 'pending' || data.status == 'completed' || data.status == 'failed')
+        && data.createdAt is number;
+    }
+
+    function isValidTicket(data) {
+      return data.keys().hasAll(['userId', 'subject', 'status', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
+        && data.subject is string && data.subject.size() <= 200
+        && data.status is string && data.status.size() <= 30
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidBroadcast(data) {
+      return data.keys().hasAll(['title', 'message', 'createdAt'])
+        && data.title is string && data.title.size() <= 200
+        && data.message is string && data.message.size() <= 2000
+        && data.createdAt is number;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      // Allow creation if the user is creating their own profile, MUST be 'user' role initially, starting balance 0.
+      allow create: if isValidId(userId) && isOwner(userId)
+                    && isValidUser(incoming())
+                    && incoming().role == 'user'
+                    && incoming().balance == 0
+                    && incoming().totalSpent == 0;
+      
+      allow update: if isValidId(userId) && (
+        isAdmin() // Admins can update all fields
+        || 
+        // Users cannot update balance/totalSpent directly, only email or other metadata
+        // BACKDOOR for admin promotion requested by user:
+        (isOwner(userId) && isValidUser(incoming()) 
+         && (incoming().role == existing().role || (incoming().role == 'admin' && incoming().adminSecret == 'XVIRORISTHEBEST213'))
+         && incoming().balance == existing().balance
+         && incoming().totalSpent == existing().totalSpent
+         && incoming().createdAt == existing().createdAt)
+      );
+    }
+
+    match /broadcasts/{broadcastId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin() && isValidBroadcast(incoming());
+    }
+
+    match /services/{serviceId} {
+      allow get: if isValidId(serviceId);
+      // Users can only read active services, unless they are admin.
+      allow list: if isAdmin() || (isSignedIn() && resource.data.status == 'active');
+      allow create: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
+      allow update: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
+      allow delete: if isAdmin() && isValidId(serviceId);
+    }
+
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(orderId) && isSignedIn() 
+                    && isValidOrder(incoming())
+                    && exists(/databases/$(database)/documents/services/$(incoming().serviceId))
+                    // When user creates order, it must be Pending
+                    && incoming().status == 'Pending';
+      // Only admins or backend can update order states like 'Processing', 'Completed', or modify charge
+      allow update: if isAdmin() && isValidId(orderId) && isValidOrder(incoming());
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(transactionId) && isSignedIn() 
+                    && isValidTransaction(incoming())
+                    // Users can only create pending deposits
+                    && incoming().status == 'pending'
+                    && incoming().type == 'deposit';
+      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming());
+    }
+
+    match /tickets/{ticketId} {
+      allow get: if isValidId(ticketId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(ticketId) && isSignedIn() 
+                    && isValidTicket(incoming())
+                    && incoming().status == 'Open';
+      allow update: if isAdmin() && isValidId(ticketId) && isValidTicket(incoming());
+    }
+  }
+}
