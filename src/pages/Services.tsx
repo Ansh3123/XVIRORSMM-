@@ -123,18 +123,19 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Service</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Price per 1000</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Min / Max</th>
+                    <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Action</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center">
+                      <td colSpan={6} className="px-6 py-12 text-center">
                         <Loader2 className="mx-auto h-8 w-8 text-gray-400 animate-spin" />
                       </td>
                     </tr>
                   ) : filteredServices.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500">
+                      <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
                         No services found.
                       </td>
                     </tr>
@@ -146,6 +147,9 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
                         <td className="px-3 py-4 text-sm text-gray-900">{service.name}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">₹{service.price.toFixed(2)}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{service.minOrder} / {service.maxOrder}</td>
+                        <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                           <a href={`/order/new?service=${service.id}`} className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors">Order Now</a>
+                        </td>
                       </tr>
                     ))
                   )}
