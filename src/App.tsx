@@ -20,18 +20,12 @@ const AdminOrders = React.lazy(() => import('./pages/AdminOrders'));
 const AdminUsers = React.lazy(() => import('./pages/AdminUsers'));
 
 function PageLoader() {
-  return (
-    <div className="flex items-center justify-center min-h-[50vh] p-4">
-      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-    </div>
-  );
+  return null;
 }
 
 function FullPageLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-    </div>
+    <div className="min-h-screen bg-gray-50"></div>
   );
 }
 
