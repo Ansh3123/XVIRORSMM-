@@ -4,14 +4,21 @@ import { useAuth } from '../contexts/AuthContext';
 import { Loader2, LogIn } from 'lucide-react';
 
 export default function Login() {
-  const { user, signIn, signUp, signInWithGoogle, loading } = useAuth();
+  const { user, userData, signIn, signUp, signInWithGoogle, loading } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  if (user) {
+  if (loading) {
+    return null;
+  }
+
+  if (user && !loading) {
+    if (userData?.role === 'admin') {
+      return <Navigate to="/admin" replace />;
+    }
     return <Navigate to="/" replace />;
   }
 

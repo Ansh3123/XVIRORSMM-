@@ -1,8 +1,9 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Loader2 } from 'lucide-react';
+import SplashScreen from './components/SplashScreen';
 
 // Lazy loaded pages
 const DashboardHome = React.lazy(() => import('./pages/DashboardHome'));
@@ -24,15 +25,17 @@ function PageLoader() {
 }
 
 function FullPageLoader() {
-  return (
-    <div className="min-h-screen bg-gray-50"></div>
-  );
+  return null;
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
-    <AuthProvider>
-      <Router>
+    <>
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+      <AuthProvider>
+        <Router>
         <Suspense fallback={<FullPageLoader />}>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -99,5 +102,6 @@ export default function App() {
         </Suspense>
       </Router>
     </AuthProvider>
+    </>
   );
 }

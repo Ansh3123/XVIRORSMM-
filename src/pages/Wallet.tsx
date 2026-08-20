@@ -83,6 +83,11 @@ export default function Wallet() {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Add Funds via UPI</h2>
+          <div className="mb-4 text-sm text-gray-700 bg-blue-50 p-3 rounded-md">
+            <p>Please send payments to this UPI ID:</p>
+            <p className="font-bold text-lg text-blue-800 my-1">astitvafex@fam</p>
+            <p className="text-xs text-gray-500 mt-2">Submit your deposit request below after payment. For support, email <a href="mailto:yourr.farhan@gmail.com" className="text-blue-600 underline">yourr.farhan@gmail.com</a></p>
+          </div>
           <form onSubmit={handleDeposit} className="flex space-x-3">
             <div className="flex-1">
               <label htmlFor="amount" className="sr-only">Amount</label>

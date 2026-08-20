@@ -15,7 +15,12 @@ export default function DashboardHome() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:ml-64">
-      <div>
+      <div className="mt-2">
+        <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Order</h3>
+        <NewOrderContent isWidget={true} />
+      </div>
+
+      <div className="mt-8">
         <h3 className="text-lg leading-6 font-medium text-gray-900">Overview</h3>
         <dl className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((item) => (
@@ -42,11 +47,6 @@ export default function DashboardHome() {
             </div>
           ))}
         </dl>
-      </div>
-
-      <div className="mt-8">
-        <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Order</h3>
-        <NewOrderContent isWidget={true} />
       </div>
 
       <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mt-6">
