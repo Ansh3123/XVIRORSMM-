@@ -17,7 +17,7 @@ export default function AdminOrders() {
     try {
       const q = query(collection(db, 'orders'));
       const snapshot = await getDocs(q);
-      const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       loaded.sort((a, b) => b.createdAt - a.createdAt);
       setOrders(loaded);
     } catch (err) {

@@ -37,12 +37,17 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const q = query(collection(db, 'services'), where('status', '==', 'active'));
-        const querySnapshot = await getDocs(q);
-        let loadedServices = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Service));
+        let loadedServices: Service[] = [];
+        try {
+          const q = query(collection(db, 'services'), where('status', '==', 'active'));
+          const querySnapshot = await getDocs(q);
+          loadedServices = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          } as Service));
+        } catch (fsErr) {
+          console.error("Firestore getDocs failed, falling back to API:", fsErr);
+        }
         
         if (loadedServices.length === 0) {
           try {
@@ -82,7 +87,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
            }
         }
       } catch (err) {
-        console.error(err);
+        console.error("Global fetchServices Error:", err);
       } finally {
         setLoading(false);
       }
