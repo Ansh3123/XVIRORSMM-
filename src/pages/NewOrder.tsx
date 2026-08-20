@@ -3,6 +3,7 @@ import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'fire
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 interface Service {
   id: string;
@@ -14,7 +15,7 @@ interface Service {
   maxOrder: number;
 }
 
-export default function NewOrder() {
+export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   const { user, userData } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [platforms, setPlatforms] = useState<string[]>([]);
@@ -30,6 +31,8 @@ export default function NewOrder() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const location = useLocation();
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -65,6 +68,19 @@ export default function NewOrder() {
         setServices(loadedServices);
         const uniquePlatforms = Array.from(new Set(loadedServices.map(s => s.platform)));
         setPlatforms(uniquePlatforms);
+
+        // Pre-select if URL has service
+        const params = new URLSearchParams(location.search);
+        const prefillServiceId = params.get('service');
+        if (prefillServiceId) {
+           const srv = loadedServices.find(s => s.id === prefillServiceId);
+           if (srv) {
+              setSelectedPlatform(srv.platform);
+              // We need to wait for categories to update, which happens in next effect,
+              // so we will set a timeout or rely on the next effect to pick it up if we set a ref.
+              // For simplicity, we just set the platform here, the user can select category.
+           }
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -72,17 +88,27 @@ export default function NewOrder() {
       }
     };
     fetchServices();
-  }, []);
+  }, [location]);
 
   useEffect(() => {
     if (selectedPlatform) {
       const platformServices = services.filter(s => s.platform === selectedPlatform);
       const uniqueCategories = Array.from(new Set(platformServices.map(s => s.category)));
       setCategories(uniqueCategories);
-      setSelectedCategory('');
-      setSelectedServiceId('');
+      
+      const params = new URLSearchParams(location.search);
+      const prefillServiceId = params.get('service');
+      const srv = services.find(s => s.id === prefillServiceId);
+      
+      if (srv && srv.platform === selectedPlatform) {
+         setSelectedCategory(srv.category);
+         setSelectedServiceId(srv.id);
+      } else {
+         setSelectedCategory('');
+         setSelectedServiceId('');
+      }
     }
-  }, [selectedPlatform, services]);
+  }, [selectedPlatform, services, location]);
 
   const selectedService = services.find(s => s.id === selectedServiceId);
   const charge = selectedService && quantity ? (selectedService.price / 1000) * parseInt(quantity) : 0;
@@ -107,7 +133,6 @@ export default function NewOrder() {
     setSuccess('');
 
     try {
-      // Create external API order securely via our backend proxy
       const apiResponse = await fetch('/api/smm/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -128,7 +153,7 @@ export default function NewOrder() {
         link,
         quantity: qty,
         charge,
-        status: 'Completed', // Simulating successful provider response
+        status: 'Completed', 
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
@@ -146,8 +171,8 @@ export default function NewOrder() {
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>;
 
   return (
-    <div className="max-w-4xl mx-auto md:ml-64 px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">New Order</h1>
+    <div className={isWidget ? "" : "max-w-4xl mx-auto px-4 py-8"}>
+      {!isWidget && <h1 className="text-2xl font-bold text-gray-900 mb-8">New Order</h1>}
       
       <form onSubmit={handleSubmit} className="bg-white shadow-sm border border-gray-200 rounded-lg p-6">
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-md">
@@ -164,7 +189,6 @@ export default function NewOrder() {
         {success && <div className="p-4 mb-6 rounded-md bg-green-50 text-green-800 text-sm">{success}</div>}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* Column 1: Platform Selection */}
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700">Platform</label>
@@ -196,7 +220,6 @@ export default function NewOrder() {
             )}
           </div>
 
-          {/* Column 2: Service Selection */}
           <div className="space-y-6">
             {selectedCategory ? (
               <div>
@@ -229,7 +252,7 @@ export default function NewOrder() {
                 required
                 value={link}
                 onChange={(e) => setLink(e.target.value)}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="https://"
               />
             </div>
@@ -243,7 +266,7 @@ export default function NewOrder() {
                 max={selectedService.maxOrder}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
               <p className="mt-1 text-xs text-gray-500">Min: {selectedService.minOrder} - Max: {selectedService.maxOrder}</p>
             </div>
@@ -263,6 +286,14 @@ export default function NewOrder() {
           </div>
         )}
       </form>
+    </div>
+  );
+}
+
+export default function NewOrder() {
+  return (
+    <div className="md:ml-64">
+      <NewOrderContent />
     </div>
   );
 }

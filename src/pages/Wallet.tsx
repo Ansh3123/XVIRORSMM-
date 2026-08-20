@@ -114,7 +114,7 @@ export default function Wallet() {
           </form>
           <div className="mt-4 p-4 bg-blue-50 rounded-md border border-blue-100">
             <p className="text-sm text-blue-800 font-medium mb-1">Manual Payment Instructions:</p>
-            <p className="text-xs text-blue-700">1. Send your desired deposit amount via UPI to: <strong className="font-bold text-gray-900 block mt-1 mb-2 text-base">isanshcool@fam</strong></p>
+            <p className="text-xs text-blue-700">1. Send your desired deposit amount via UPI to: <strong className="font-bold text-gray-900 block mt-1 mb-2 text-base">astitvafex@fam</strong></p>
             <p className="text-xs text-blue-700">2. Enter the exact amount you paid in the box above and click Deposit.</p>
             <p className="text-xs text-blue-700">3. Admin will verify the transaction and add funds to your wallet shortly.</p>
           </div>

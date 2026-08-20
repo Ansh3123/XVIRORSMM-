@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, LogIn } from 'lucide-react';
@@ -12,7 +12,11 @@ export default function Login() {
   const [error, setError] = useState('');
 
   if (loading) {
-    return <div className="min-h-screen bg-gray-50" />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
   }
 
   if (user) {
@@ -21,6 +25,7 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSigningIn) return;
     setError('');
     setIsSigningIn(true);
     try {
@@ -31,20 +36,38 @@ export default function Login() {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Authentication failed');
+      const code = err.code || '';
+      if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+        setError('Invalid email or password.');
+      } else if (code === 'auth/email-already-in-use') {
+        setError('This email is already registered. Please sign in instead.');
+      } else if (code === 'auth/weak-password') {
+        setError('Password should be at least 6 characters.');
+      } else if (code === 'auth/too-many-requests') {
+        setError('Too many attempts. Please try again later.');
+      } else {
+        setError('Authentication failed. Please check your details.');
+      }
     } finally {
       setIsSigningIn(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    if (isSigningIn) return;
     setError('');
     setIsSigningIn(true);
     try {
       await signInWithGoogle();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Google Authentication failed');
+      const code = err.code || '';
+      // Ignore if user just closed the popup
+      if (code === 'auth/popup-closed-by-user') {
+        setError('');
+      } else {
+        setError('Google Authentication failed. Please try again.');
+      }
     } finally {
       setIsSigningIn(false);
     }

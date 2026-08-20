@@ -1,6 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { Wallet, ShoppingCart, CheckCircle, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { NewOrderContent } from './NewOrder';
 
 export default function DashboardHome() {
   const { userData } = useAuth();
@@ -43,27 +44,18 @@ export default function DashboardHome() {
         </dl>
       </div>
 
-      <Link to="/services" className="block mt-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-        <div className="px-6 py-8 sm:p-10 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold text-white">Services Catalog</h3>
-            <p className="mt-2 text-blue-100 max-w-xl">Browse our complete list of social media marketing services including YouTube, Telegram, Instagram, and Facebook.</p>
-          </div>
-          <div className="hidden sm:block text-white">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          </div>
-        </div>
-      </Link>
+      <div className="mt-8">
+        <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Order</h3>
+        <NewOrderContent isWidget={true} />
+      </div>
 
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mt-6">
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Need Help?</h3>
           <div className="mt-2 max-w-xl text-sm text-gray-500">
-            <p>If you have any questions or need assistance, our support team is available 24/7 on Telegram.</p>
+            <p>If you have any questions or need assistance, our support team is available 24/7 on Telegram or via Email.</p>
           </div>
-          <div className="mt-5">
+          <div className="mt-5 flex space-x-4">
             <a
               href="https://t.me/Deleaxy"
               target="_blank"
@@ -71,6 +63,12 @@ export default function DashboardHome() {
               className="inline-flex items-center justify-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm transition-colors"
             >
               Contact @Deleaxy on Telegram
+            </a>
+            <a
+              href="mailto:yourr.farhan@gmail.com"
+              className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm transition-colors"
+            >
+              Email Support
             </a>
           </div>
         </div>

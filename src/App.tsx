@@ -9,9 +9,13 @@ import Services from './pages/Services';
 import NewOrder from './pages/NewOrder';
 import Wallet from './pages/Wallet';
 import Orders from './pages/Orders';
+import Tickets from './pages/Tickets';
+
+import AdminDashboard from './pages/AdminDashboard';
 import AdminServices from './pages/AdminServices';
 import AdminDeposits from './pages/AdminDeposits';
-import Tickets from './pages/Tickets';
+import AdminOrders from './pages/AdminOrders';
+import AdminUsers from './pages/AdminUsers';
 
 export default function App() {
   return (
@@ -27,8 +31,12 @@ export default function App() {
             <Route path="/orders" element={<Orders />} />
             <Route path="/wallet" element={<Wallet />} />
             <Route path="/tickets" element={<Tickets />} />
+            
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/services" element={<AdminServices />} />
             <Route path="/admin/deposits" element={<AdminDeposits />} />
+            <Route path="/admin/orders" element={<AdminOrders />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
           </Route>
         </Routes>
       </Router>
