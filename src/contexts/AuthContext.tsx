@@ -39,33 +39,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser);
       
       if (currentUser) {
-        // Fetch or create user data
-        const userRef = doc(db, 'users', currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (userSnap.exists()) {
-          setUserData(userSnap.data() as UserData);
-        } else {
-          const newUserData: UserData = {
-            role: 'user',
-            balance: 0,
-            totalSpent: 0,
-            email: currentUser.email || '',
-          };
+        // Fetch or create user data without blocking the UI if possible,
+        // but we need it for role-based routing. We still have to wait,
+        // but let's at least not wait if there's no user.
+        try {
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
           
-          await setDoc(userRef, {
-            ...newUserData,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          });
-          
-          setUserData(newUserData);
+          if (userSnap.exists()) {
+            setUserData(userSnap.data() as UserData);
+          } else {
+            const newUserData: UserData = {
+              role: 'user',
+              balance: 0,
+              totalSpent: 0,
+              email: currentUser.email || '',
+            };
+            
+            await setDoc(userRef, {
+              ...newUserData,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+            
+            setUserData(newUserData);
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        } finally {
+          setLoading(false);
         }
       } else {
         setUserData(null);
+        setLoading(false); // Immediate unblock for unauthenticated users
       }
-      
-      setLoading(false);
     });
 
     return () => unsubscribe();
