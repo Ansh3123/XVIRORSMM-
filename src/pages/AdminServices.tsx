@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, addDoc, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, setDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Loader2, Plus, Edit2, Trash2, ShieldAlert, DownloadCloud } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,13 +27,54 @@ export default function AdminServices() {
     if (userData?.role !== 'admin') return;
     setLoading(true);
     try {
-      const q = query(collection(db, 'services'));
-      const querySnapshot = await getDocs(q);
-      const loadedServices = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Service));
-      setServices(loadedServices);
+      // 1. Fetch from SMM API first as the default source
+      let apiServicesMap: Record<string, Service> = {};
+      try {
+        const res = await fetch('/api/smm/sync', { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.services) {
+          data.services.forEach((s: any) => {
+            const originalPrice = parseFloat(s.rate || '0');
+            const markup = originalPrice > 5 ? 4 : 2;
+            apiServicesMap[String(s.service)] = {
+              id: String(s.service),
+              platform: s.category ? s.category.trim().split(' ')[0] : 'Other',
+              category: s.category || 'Default',
+              name: s.name || `Service ${s.service}`,
+              price: originalPrice + markup,
+              minOrder: parseInt(s.min || '0'),
+              maxOrder: parseInt(s.max || '0'),
+              status: 'active'
+            };
+          });
+        }
+      } catch (apiErr) {
+        console.error('Failed to fetch SMM API services:', apiErr);
+      }
+
+      // 2. Fetch from Firestore
+      let firestoreServices: Service[] = [];
+      try {
+        const q = query(collection(db, 'services'));
+        const querySnapshot = await getDocs(q);
+        firestoreServices = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Service));
+      } catch (fsErr) {
+        console.error('Failed to fetch Firestore services:', fsErr);
+      }
+
+      // 3. Merge SMM API services and Firestore overrides/custom services
+      const mergedServicesMap = { ...apiServicesMap };
+      firestoreServices.forEach((fsSrv) => {
+        mergedServicesMap[fsSrv.id] = {
+          ...mergedServicesMap[fsSrv.id],
+          ...fsSrv
+        };
+      });
+
+      setServices(Object.values(mergedServicesMap));
     } catch (err) {
       console.error(err);
     } finally {
@@ -142,8 +183,8 @@ export default function AdminServices() {
       };
 
       if (currentService.id) {
-        // Update
-        await updateDoc(doc(db, 'services', currentService.id), serviceData);
+        // Update (uses setDoc with merge so it works for default API services not yet in Firestore)
+        await setDoc(doc(db, 'services', currentService.id), serviceData, { merge: true });
       } else {
         // Create
         await addDoc(collection(db, 'services'), {

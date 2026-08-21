@@ -13,6 +13,7 @@ interface Service {
   price: number;
   minOrder: number;
   maxOrder: number;
+  status?: string;
 }
 
 export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
@@ -37,41 +38,60 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        let loadedServices: Service[] = [];
+        // 1. Fetch from SMM API first as the default source
+        let apiServicesMap: Record<string, Service> = {};
         try {
-          const q = query(collection(db, 'services'), where('status', '==', 'active'));
+          const res = await fetch('/api/smm/sync', { method: 'POST' });
+          const data = await res.json();
+          if (data.success && data.services) {
+            data.services.forEach((s: any) => {
+              const originalPrice = parseFloat(s.rate || '0');
+              const markup = originalPrice > 5 ? 4 : 2;
+              apiServicesMap[String(s.service)] = {
+                id: String(s.service),
+                platform: s.category ? s.category.trim().split(' ')[0] : 'Other',
+                category: s.category || 'Default',
+                name: s.name || `Service ${s.service}`,
+                price: originalPrice + markup,
+                minOrder: parseInt(s.min || '0'),
+                maxOrder: parseInt(s.max || '0'),
+                status: 'active'
+              };
+            });
+          }
+        } catch (apiErr) {
+          console.error('Failed to fetch from SMM API:', apiErr);
+        }
+
+        // 2. Fetch from Firestore
+        let firestoreServices: Service[] = [];
+        try {
+          const servicesRef = collection(db, 'services');
+          const q = query(servicesRef);
           const querySnapshot = await getDocs(q);
-          loadedServices = querySnapshot.docs.map(doc => ({
+          firestoreServices = querySnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           } as Service));
         } catch (fsErr) {
-          console.error("Firestore getDocs failed, falling back to API:", fsErr);
+          console.error('Failed to fetch from Firestore:', fsErr);
         }
-        
-        if (loadedServices.length === 0) {
-          try {
-            const res = await fetch('/api/smm/sync', { method: 'POST' });
-            const data = await res.json();
-            if (data.success && data.services) {
-              loadedServices = data.services.map((s: any) => {
-                const originalPrice = parseFloat(s.rate || '0');
-                const markup = originalPrice > 5 ? 4 : 2;
-                return {
-                  id: String(s.service),
-                  platform: s.category ? s.category.trim().split(' ')[0] : 'Other',
-                  category: s.category || 'Default',
-                  name: s.name || `Service ${s.service}`,
-                  price: originalPrice + markup,
-                  minOrder: parseInt(s.min || '0'),
-                  maxOrder: parseInt(s.max || '0'),
-                  status: 'active'
-                };
-              });
-            }
-          } catch (apiErr) {
-            console.error('Fallback API failed:', apiErr);
-          }
+
+        // 3. Merge SMM API services and Firestore overrides/custom services
+        const mergedServicesMap = { ...apiServicesMap };
+        firestoreServices.forEach((fsSrv) => {
+          mergedServicesMap[fsSrv.id] = {
+            ...mergedServicesMap[fsSrv.id],
+            ...fsSrv
+          };
+        });
+
+        let loadedServices = Object.values(mergedServicesMap);
+
+        // For regular users, filter only active services
+        const isAdmin = userData?.role === 'admin';
+        if (!isAdmin) {
+          loadedServices = loadedServices.filter((s: any) => s.status === 'active');
         }
 
         setServices(loadedServices);
@@ -96,7 +116,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
       }
     };
     fetchServices();
-  }, [location]);
+  }, [location, userData]);
 
   useEffect(() => {
     if (selectedPlatform) {
