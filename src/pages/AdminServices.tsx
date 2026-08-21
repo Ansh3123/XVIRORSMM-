@@ -3,17 +3,7 @@ import { collection, query, getDocs, addDoc, setDoc, doc, deleteDoc, writeBatch 
 import { db } from '../lib/firebase';
 import { Loader2, Plus, Edit2, Trash2, ShieldAlert, DownloadCloud } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-
-interface Service {
-  id: string;
-  platform: string;
-  category: string;
-  name: string;
-  price: number;
-  minOrder: number;
-  maxOrder: number;
-  status: string;
-}
+import { Service } from '../lib/smm';
 
 export default function AdminServices() {
   const { userData } = useAuth();
