@@ -41,16 +41,20 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
             const res = await fetch('/api/smm/sync', { method: 'POST' });
             const data = await res.json();
             if (data.success && data.services) {
-              loadedServices = data.services.map((s: any) => ({
-                id: String(s.service),
-                platform: s.category ? s.category.split(' ')[0] : 'Other',
-                category: s.category || 'Default',
-                name: s.name || `Service ${s.service}`,
-                price: parseFloat(s.rate || '0'),
-                minOrder: parseInt(s.min || '0'),
-                maxOrder: parseInt(s.max || '0'),
-                status: 'active'
-              }));
+              loadedServices = data.services.map((s: any) => {
+                const originalPrice = parseFloat(s.rate || '0');
+                const markup = originalPrice > 5 ? 4 : 2;
+                return {
+                  id: String(s.service),
+                  platform: s.category ? s.category.split(' ')[0] : 'Other',
+                  category: s.category || 'Default',
+                  name: s.name || `Service ${s.service}`,
+                  price: originalPrice + markup,
+                  minOrder: parseInt(s.min || '0'),
+                  maxOrder: parseInt(s.max || '0'),
+                  status: 'active'
+                };
+              });
             }
           } catch (apiErr) {
             console.error('Fallback API failed:', apiErr);

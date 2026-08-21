@@ -95,11 +95,13 @@ export default function AdminServices() {
           for (const s of chunk) {
             const serviceRef = doc(collection(db, 'services'), String(s.service));
             const platformGuess = s.category ? s.category.trim().split(' ')[0] : 'Other';
+            const originalPrice = parseFloat(s.rate || '0');
+            const markup = originalPrice > 5 ? 4 : 2;
             const serviceData = {
               platform: platformGuess,
               category: s.category || 'Default',
               name: s.name || `Service ${s.service}`,
-              price: parseFloat(s.rate || '0') + 2,
+              price: originalPrice + markup,
               minOrder: parseInt(s.min || '0'),
               maxOrder: parseInt(s.max || '0'),
               status: 'active',

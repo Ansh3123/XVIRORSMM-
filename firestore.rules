@@ -26,10 +26,10 @@ service cloud.firestore {
 
     function isValidService(data) {
       return data.keys().hasAll(['platform', 'category', 'name', 'price', 'minOrder', 'maxOrder', 'status', 'createdAt', 'updatedAt'])
-        && data.platform is string && data.platform.size() <= 50
-        && data.category is string && data.category.size() <= 100
-        && data.name is string && data.name.size() <= 200
-        && ( !('description' in data.keys()) || (data.description is string && data.description.size() <= 2000) )
+        && data.platform is string && data.platform.size() <= 500
+        && data.category is string && data.category.size() <= 1000
+        && data.name is string && data.name.size() <= 2000
+        && ( !('description' in data.keys()) || (data.description is string && data.description.size() <= 5000) )
         && data.price is number && data.price >= 0
         && data.minOrder is number && data.minOrder >= 1
         && data.maxOrder is number && data.maxOrder >= 1
