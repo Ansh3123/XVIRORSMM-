@@ -55,8 +55,10 @@ service cloud.firestore {
         && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
         && data.amount is number
         && data.type is string && (data.type == 'deposit' || data.type == 'refund' || data.type == 'charge')
-        && data.status is string && (data.status == 'pending' || data.status == 'completed' || data.status == 'failed')
-        && data.createdAt is number;
+        && data.status is string && (data.status == 'pending' || data.status == 'completed' || data.status == 'failed' || data.status == 'rejected')
+        && data.createdAt is number
+        && (!('proofImage' in data.keys()) || (data.proofImage is string && data.proofImage.size() <= 1048576)) // 1MB for base64 image
+        && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000));
     }
 
     function isValidTicket(data) {

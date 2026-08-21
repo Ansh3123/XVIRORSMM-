@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, where, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, Plus, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Transaction {
@@ -11,13 +11,18 @@ interface Transaction {
   type: string;
   status: string;
   createdAt: number;
+  rejectReason?: string;
 }
 
 export default function Wallet() {
   const { user, userData } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Deposit state
+  const [step, setStep] = useState(1);
   const [depositAmount, setDepositAmount] = useState('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -42,9 +47,57 @@ export default function Wallet() {
     fetchTransactions();
   }, [user]);
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+            } else {
+                if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            setProofImage(dataUrl);
+        };
+        img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleNextStep = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositAmount || parseFloat(depositAmount) < 10) {
+      alert("Minimum deposit is ₹10");
+      return;
+    }
+    setStep(2);
+  };
+
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !depositAmount) return;
+    if (!user || !depositAmount || !proofImage) return;
     
     setSubmitting(true);
     try {
@@ -53,17 +106,26 @@ export default function Wallet() {
         amount: parseFloat(depositAmount),
         type: 'deposit',
         status: 'pending',
+        proofImage: proofImage,
         createdAt: Date.now()
       });
       setDepositAmount('');
-      // Trigger a re-fetch conceptually or rely on state. 
-      // For simplicity, we just reload the page or add to local state.
+      setProofImage(null);
+      setStep(1);
       window.location.reload();
     } catch (err) {
       console.error(err);
+      alert("Failed to submit request.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const upiId = "astitvafex@fam";
+  const upiName = encodeURIComponent("XVIROR SMM");
+  const getUpiUrl = (app?: string) => {
+    const base = `upi://pay?pa=${upiId}&pn=${upiName}&am=${depositAmount}&cu=INR`;
+    return base;
   };
 
   return (
@@ -83,46 +145,92 @@ export default function Wallet() {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Add Funds via UPI</h2>
-          <div className="mb-4 text-sm text-gray-700 bg-blue-50 p-3 rounded-md">
-            <p>Please send payments to this UPI ID:</p>
-            <p className="font-bold text-lg text-blue-800 my-1">astitvafex@fam</p>
-            <p className="text-xs text-gray-500 mt-2">Submit your deposit request below after payment. For support, email <a href="mailto:yourr.farhan@gmail.com" className="text-blue-600 underline">yourr.farhan@gmail.com</a></p>
-          </div>
-          <form onSubmit={handleDeposit} className="flex space-x-3">
-            <div className="flex-1">
-              <label htmlFor="amount" className="sr-only">Amount</label>
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 sm:text-sm">₹</span>
-                </div>
-                <input
-                  type="number"
-                  name="amount"
-                  id="amount"
-                  min="10"
-                  required
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md py-2 border"
-                  placeholder="0.00"
-                />
+          
+          {step === 1 ? (
+            <form onSubmit={handleNextStep} className="space-y-4">
+              <div className="text-sm text-gray-700 bg-blue-50 p-3 rounded-md">
+                <p>Enter the amount you wish to deposit (Minimum ₹10)</p>
               </div>
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-              Deposit
-            </button>
-          </form>
-          <div className="mt-4 p-4 bg-blue-50 rounded-md border border-blue-100">
-            <p className="text-sm text-blue-800 font-medium mb-1">Manual Payment Instructions:</p>
-            <p className="text-xs text-blue-700">1. Send your desired deposit amount via UPI to: <strong className="font-bold text-gray-900 block mt-1 mb-2 text-base">astitvafex@fam</strong></p>
-            <p className="text-xs text-blue-700">2. Enter the exact amount you paid in the box above and click Deposit.</p>
-            <p className="text-xs text-blue-700">3. Admin will verify the transaction and add funds to your wallet shortly.</p>
-          </div>
+              
+              <div>
+                <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                <div className="relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">₹</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="amount"
+                    id="amount"
+                    min="10"
+                    required
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md py-3 border"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              
+              <button
+                type="submit"
+                className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Continue to Payment <ArrowRight className="ml-2 w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleDeposit} className="space-y-4">
+               <div className="flex justify-between items-center">
+                 <h3 className="text-md font-semibold text-gray-900">Pay ₹{depositAmount}</h3>
+                 <button type="button" onClick={() => setStep(1)} className="text-gray-400 hover:text-gray-500">
+                   <X className="w-5 h-5" />
+                 </button>
+               </div>
+
+               <div className="bg-gray-50 p-4 rounded-md border border-gray-200 space-y-3 text-center">
+                 <p className="text-sm text-gray-700">Open a UPI app to complete payment to:</p>
+                 <p className="font-bold text-lg text-blue-800">{upiId}</p>
+                 
+                 <div className="flex flex-wrap gap-2 justify-center mt-3">
+                   <a href={getUpiUrl()} className="px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
+                     Open UPI App
+                   </a>
+                 </div>
+               </div>
+
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                   Upload Payment Screenshot (Required)
+                 </label>
+                 <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative">
+                   <div className="space-y-1 text-center">
+                     {proofImage ? (
+                       <img src={proofImage} alt="Proof preview" className="mx-auto h-32 object-contain" />
+                     ) : (
+                       <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                     )}
+                     <div className="flex text-sm text-gray-600 justify-center">
+                       <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                         <span>{proofImage ? 'Change Image' : 'Upload a file'}</span>
+                         <input id="file-upload" name="file-upload" type="file" accept="image/*" className="sr-only" onChange={handleImageChange} required={!proofImage} />
+                       </label>
+                     </div>
+                     {!proofImage && <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>}
+                   </div>
+                 </div>
+               </div>
+
+              <button
+                type="submit"
+                disabled={submitting || !proofImage}
+                className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Plus className="w-5 h-5 mr-2" />}
+                Submit Deposit Request
+              </button>
+            </form>
+          )}
         </div>
       </div>
 
@@ -138,23 +246,26 @@ export default function Wallet() {
           ) : (
             transactions.map((tx) => (
               <li key={tx.id} className="p-4 sm:px-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center">
                     <div className={`p-2 rounded-full ${tx.type === 'deposit' ? 'bg-green-100' : 'bg-red-100'}`}>
-                      {tx.type === 'deposit' ? <ArrowDownLeft className={`h-5 w-5 ${tx.status === 'pending' ? 'text-yellow-600' : 'text-green-600'}`} /> : <ArrowUpRight className="h-5 w-5 text-red-600" />}
+                      {tx.type === 'deposit' ? <ArrowDownLeft className={`h-5 w-5 ${tx.status === 'pending' ? 'text-yellow-600' : tx.status === 'rejected' ? 'text-red-600' : 'text-green-600'}`} /> : <ArrowUpRight className="h-5 w-5 text-red-600" />}
                     </div>
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-900 capitalize">{tx.type}</p>
                       <p className="text-sm text-gray-500">{format(tx.createdAt, 'MMM d, yyyy HH:mm')}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     <p className={`text-sm font-semibold ${tx.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
                       {tx.type === 'deposit' ? '+' : '-'}₹{tx.amount.toFixed(2)}
                     </p>
-                    <p className={`text-xs capitalize ${tx.status === 'pending' ? 'text-yellow-600' : tx.status === 'completed' ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-xs capitalize font-medium ${tx.status === 'pending' ? 'text-yellow-600' : tx.status === 'completed' ? 'text-green-600' : 'text-red-600'}`}>
                       {tx.status}
                     </p>
+                    {tx.status === 'rejected' && tx.rejectReason && (
+                       <p className="text-xs text-red-500 mt-1">Reason: {tx.rejectReason}</p>
+                    )}
                   </div>
                 </div>
               </li>

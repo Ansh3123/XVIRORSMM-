@@ -53,16 +53,24 @@ export default function DashboardHome() {
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Need Help?</h3>
           <div className="mt-2 max-w-xl text-sm text-gray-500">
-            <p>If you have any questions or need assistance, our support team is available 24/7 on Telegram or via Email.</p>
+            <p>If you have any questions or need assistance, our support team is available 24/7 on WhatsApp, Telegram, or via Email.</p>
           </div>
-          <div className="mt-5 flex space-x-4">
+          <div className="mt-5 flex space-x-4 flex-wrap gap-y-4">
+            <a
+              href="https://wa.me/917069245078"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:text-sm transition-colors"
+            >
+              WhatsApp Support
+            </a>
             <a
               href="https://t.me/Deleaxy"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm transition-colors"
             >
-              Contact @Deleaxy on Telegram
+              Telegram Support
             </a>
             <a
               href="mailto:yourr.farhan@gmail.com"
