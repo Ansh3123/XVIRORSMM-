@@ -14,8 +14,8 @@ async function startServer() {
   // API endpoints
   app.post("/api/smm/sync", async (req, res) => {
     try {
-      const apiKey = "791fad89fb2183fc6d7665693313f66e";
-      const apiUrl = "https://smmupi.com/api/v2";
+      const apiKey = "27400c706565bd0de788f2ce390b4236ac20d4fc";
+      const apiUrl = "https://themainsmmprovider.com/api/v2";
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -38,8 +38,8 @@ async function startServer() {
   app.post("/api/smm/order", async (req, res) => {
     try {
       const { service, link, quantity } = req.body;
-      const apiKey = "791fad89fb2183fc6d7665693313f66e";
-      const apiUrl = "https://smmupi.com/api/v2";
+      const apiKey = "27400c706565bd0de788f2ce390b4236ac20d4fc";
+      const apiUrl = "https://themainsmmprovider.com/api/v2";
 
       const response = await fetch(apiUrl, {
         method: "POST",

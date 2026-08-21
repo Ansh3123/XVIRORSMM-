@@ -56,10 +56,10 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
             if (data.success && data.services) {
               loadedServices = data.services.map((s: any) => ({
                 id: String(s.service),
-                platform: s.category ? s.category.split(' ')[0] : 'Other',
+                platform: s.category ? s.category.trim().split(' ')[0] : 'Other',
                 category: s.category || 'Default',
                 name: s.name || `Service ${s.service}`,
-                price: parseFloat(s.rate || '0'),
+                price: parseFloat(s.rate || '0') + 2,
                 minOrder: parseInt(s.min || '0'),
                 maxOrder: parseInt(s.max || '0'),
                 status: 'active'

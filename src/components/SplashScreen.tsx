@@ -12,14 +12,14 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
     // 3 -> Telegram (Send)
     // 4 -> Truck & Banner
     // 5 -> Exit
-    const t1 = setTimeout(() => setStep(1), 1000);
-    const t2 = setTimeout(() => setStep(2), 2000);
-    const t3 = setTimeout(() => setStep(3), 3000);
-    const t4 = setTimeout(() => setStep(4), 4000);
+    const t1 = setTimeout(() => setStep(1), 300);
+    const t2 = setTimeout(() => setStep(2), 600);
+    const t3 = setTimeout(() => setStep(3), 900);
+    const t4 = setTimeout(() => setStep(4), 1200);
     const t5 = setTimeout(() => {
       setStep(5);
-      setTimeout(onComplete, 500); // Wait for exit animation to complete
-    }, 6000);
+      setTimeout(onComplete, 300); // Wait for exit animation to complete
+    }, 2000);
 
     return () => {
       clearTimeout(t1);
@@ -46,7 +46,7 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
             className="flex flex-col items-center text-pink-600 absolute"
           >
             <Instagram size={120} />
@@ -59,7 +59,7 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
             className="flex flex-col items-center text-red-600 absolute"
           >
             <Youtube size={120} />
@@ -72,7 +72,7 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
             className="flex flex-col items-center text-blue-600 absolute"
           >
             <Facebook size={120} />
@@ -85,7 +85,7 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
             className="flex flex-col items-center text-sky-500 absolute"
           >
             <Send size={120} />
@@ -98,7 +98,7 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.6, ease: "easeOut" }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
             className="flex flex-col items-center text-gray-900 absolute"
           >
             <Truck size={120} className="mb-6 text-blue-600" />

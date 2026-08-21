@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Loader2 } from 'lucide-react';
 import SplashScreen from './components/SplashScreen';
+import FirebaseSyncIndicator from './components/FirebaseSyncIndicator';
 
 // Lazy loaded pages
 const DashboardHome = React.lazy(() => import('./pages/DashboardHome'));
@@ -35,6 +36,7 @@ export default function App() {
     <>
       {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       <AuthProvider>
+        <FirebaseSyncIndicator />
         <Router>
         <Suspense fallback={<FullPageLoader />}>
           <Routes>

@@ -7,7 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 
 interface UserData {
@@ -35,19 +35,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubDoc: (() => void) | undefined;
+    
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      
       if (currentUser) {
-        // Fetch or create user data without blocking the UI if possible,
-        // but we need it for role-based routing. We still have to wait,
-        // but let's at least not wait if there's no user.
-        try {
-          const userRef = doc(db, 'users', currentUser.uid);
-          const userSnap = await getDoc(userRef);
-          
+        setLoading(true);
+        setUser(currentUser);
+        // Use onSnapshot for real-time fast sync
+        const userRef = doc(db, 'users', currentUser.uid);
+        if (unsubDoc) unsubDoc(); // clear any previous listener
+        unsubDoc = onSnapshot(userRef, (userSnap) => {
           if (userSnap.exists()) {
             setUserData(userSnap.data() as UserData);
+            setLoading(false);
           } else {
             const newUserData: UserData = {
               role: 'user',
@@ -56,26 +56,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: currentUser.email || '',
             };
             
-            await setDoc(userRef, {
+            setDoc(userRef, {
               ...newUserData,
               createdAt: Date.now(),
               updatedAt: Date.now(),
+            }).then(() => {
+              setUserData(newUserData);
+              setLoading(false);
             });
-            
-            setUserData(newUserData);
           }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-        } finally {
-          setLoading(false);
-        }
+        }, (error) => {
+           console.error("Error fetching user data:", error);
+           setLoading(false);
+        });
+        
+        // We could store the unsubDoc to clean it up when auth state changes, 
+        // but for simplicity it runs until the next auth state change where we can clear it.
+        // Actually, we should clear it if we unsubscribe from auth or if the user logs out.
       } else {
+        if (unsubDoc) {
+          unsubDoc();
+          unsubDoc = undefined;
+        }
+        setUser(null);
         setUserData(null);
         setLoading(false); // Immediate unblock for unauthenticated users
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubDoc) unsubDoc();
+      unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, pass: string) => {
