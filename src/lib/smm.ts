@@ -23,7 +23,21 @@ export async function fetchSMMServices(): Promise<Service[]> {
       }
     }
   } catch (err) {
-    console.warn("Backend SMM sync unavailable or failed. Trying direct client fallback...", err);
+    console.warn("Backend SMM sync unavailable or failed. Trying local static backup...", err);
+  }
+
+  // 1.5 Try to fetch from the local static backup services.json (highly reliable on static hosts like Vercel/GitHub Pages)
+  try {
+    const res = await fetch('/services.json');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        console.log("Successfully loaded SMM services from local static backup services.json!");
+        return parseSMMResponse(data);
+      }
+    }
+  } catch (err) {
+    console.warn("Local static services.json backup failed. Trying direct client fallback...", err);
   }
 
   // 2. Fallback: Try to fetch directly from SMM provider (in case SMM provider has CORS enabled)

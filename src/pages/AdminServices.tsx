@@ -3,7 +3,7 @@ import { collection, query, getDocs, addDoc, setDoc, doc, deleteDoc, writeBatch 
 import { db } from '../lib/firebase';
 import { Loader2, Plus, Edit2, Trash2, ShieldAlert, DownloadCloud } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { Service } from '../lib/smm';
+import { Service, fetchSMMServices } from '../lib/smm';
 
 export default function AdminServices() {
   const { userData } = useAuth();
@@ -17,32 +17,15 @@ export default function AdminServices() {
     if (userData?.role !== 'admin') return;
     setLoading(true);
     try {
-      // 1. Fetch from SMM API first as the default source
-      let apiServicesMap: Record<string, Service> = {};
+      // 1. Fetch from SMM helper (handles backend API, CORS, and static local backups)
+      let loadedServices: Service[] = [];
       try {
-        const res = await fetch('/api/smm/sync', { method: 'POST' });
-        const data = await res.json();
-        if (data.success && data.services) {
-          data.services.forEach((s: any) => {
-            const originalPrice = parseFloat(s.rate || '0');
-            const markup = originalPrice > 5 ? 4 : 2;
-            apiServicesMap[String(s.service)] = {
-              id: String(s.service),
-              platform: s.category ? s.category.trim().split(' ')[0] : 'Other',
-              category: s.category || 'Default',
-              name: s.name || `Service ${s.service}`,
-              price: originalPrice + markup,
-              minOrder: parseInt(s.min || '0'),
-              maxOrder: parseInt(s.max || '0'),
-              status: 'active'
-            };
-          });
-        }
+        loadedServices = await fetchSMMServices();
       } catch (apiErr) {
-        console.error('Failed to fetch SMM API services:', apiErr);
+        console.error('Failed to fetch from SMM helper:', apiErr);
       }
 
-      // 2. Fetch from Firestore
+      // 2. Fetch from Firestore (for custom services & admin overrides)
       let firestoreServices: Service[] = [];
       try {
         const q = query(collection(db, 'services'));
@@ -55,8 +38,12 @@ export default function AdminServices() {
         console.error('Failed to fetch Firestore services:', fsErr);
       }
 
-      // 3. Merge SMM API services and Firestore overrides/custom services
-      const mergedServicesMap = { ...apiServicesMap };
+      // 3. Merge SMM helper services and Firestore overrides/custom services
+      const mergedServicesMap: Record<string, Service> = {};
+      loadedServices.forEach((s) => {
+        mergedServicesMap[s.id] = s;
+      });
+
       firestoreServices.forEach((fsSrv) => {
         mergedServicesMap[fsSrv.id] = {
           ...mergedServicesMap[fsSrv.id],
