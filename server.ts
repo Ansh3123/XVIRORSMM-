@@ -14,43 +14,19 @@ async function startServer() {
   // API endpoints
   app.post("/api/smm/sync", async (req, res) => {
     try {
-      const apiKey = process.env.SMM_API_KEY || "c1e9dedb99e6cbfccd7f2cbb01cfd5b7";
-      const apiUrl = process.env.SMM_API_URL; // Optional. e.g. https://smmprovider.com/api/v2
+      const apiKey = "791fad89fb2183fc6d7665693313f66e";
+      const apiUrl = "https://smmupi.com/api/v2";
 
-      if (!apiUrl) {
-        console.log("[SMM API] Using mock data because SMM_API_URL is not set.");
-        // Mock data covering all user requested platforms and categories
-        const platforms: Record<string, string[]> = {
-          "Instagram": ["Likes", "Followers", "Views", "Comments", "Shares"],
-          "Facebook": ["Likes", "Followers", "Views", "Comments", "Shares"],
-          "Youtube": ["Subscriber", "Likes", "Views", "Comments", "Shares"],
-          "Telegram": ["Channel members", "Views"]
-        };
-        
-        let mockServices: any[] = [];
-        let idCounter = 1;
-        
-        for (const [platform, categories] of Object.entries(platforms)) {
-          for (const category of categories) {
-            for (let i = 1; i <= 12; i++) {
-              mockServices.push({
-                service: idCounter++,
-                name: `${platform} ${category} [Server ${i}]`,
-                type: "Default",
-                category: `${platform} ${category}`,
-                rate: (Math.random() * 50 + 10).toFixed(2),
-                min: "100",
-                max: "10000"
-              });
-            }
-          }
-        }
-
-        return res.json({ success: true, services: mockServices });
-      }
-
-      // If the provider URL is set, make the actual external fetch
-      const response = await fetch(`${apiUrl}?key=${apiKey}&action=services`);
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          key: apiKey,
+          action: "services"
+        })
+      });
       const data = await response.json();
       res.json({ success: true, services: data });
     } catch (err) {
@@ -62,20 +38,22 @@ async function startServer() {
   app.post("/api/smm/order", async (req, res) => {
     try {
       const { service, link, quantity } = req.body;
-      const apiKey = process.env.SMM_API_KEY || "c1e9dedb99e6cbfccd7f2cbb01cfd5b7";
-      const apiUrl = process.env.SMM_API_URL;
+      const apiKey = "791fad89fb2183fc6d7665693313f66e";
+      const apiUrl = "https://smmupi.com/api/v2";
 
-      if (!apiKey) {
-        return res.status(500).json({ error: "SMM API key not configured" });
-      }
-
-      if (!apiUrl) {
-        console.log(`[SMM API Mock] Placing order: Service ${service}, Link: ${link}, Qty: ${quantity}`);
-        return res.json({ success: true, orderId: Math.floor(Math.random() * 100000) });
-      }
-
-      // Make actual fetch to API provider
-      const response = await fetch(`${apiUrl}?key=${apiKey}&action=add&service=${service}&link=${link}&quantity=${quantity}`);
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          key: apiKey,
+          action: "add",
+          service: String(service),
+          link: String(link),
+          quantity: String(quantity)
+        })
+      });
       const data = await response.json();
       
       if (data.error) {

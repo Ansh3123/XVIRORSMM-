@@ -81,10 +81,9 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
            const srv = loadedServices.find(s => s.id === prefillServiceId);
            if (srv) {
               setSelectedPlatform(srv.platform);
-              // We need to wait for categories to update, which happens in next effect,
-              // so we will set a timeout or rely on the next effect to pick it up if we set a ref.
-              // For simplicity, we just set the platform here, the user can select category.
            }
+        } else if (uniquePlatforms.length > 0 && !selectedPlatform) {
+           setSelectedPlatform(uniquePlatforms[0]);
         }
       } catch (err) {
         console.error("Global fetchServices Error:", err);
@@ -108,6 +107,10 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
       if (srv && srv.platform === selectedPlatform) {
          setSelectedCategory(srv.category);
          setSelectedServiceId(srv.id);
+      } else if (uniqueCategories.length > 0) {
+         setSelectedCategory(uniqueCategories[0]);
+         const firstService = platformServices.find(s => s.category === uniqueCategories[0]);
+         if (firstService) setSelectedServiceId(firstService.id);
       } else {
          setSelectedCategory('');
          setSelectedServiceId('');
@@ -213,8 +216,14 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
                 <select
                   value={selectedCategory}
                   onChange={(e) => {
-                    setSelectedCategory(e.target.value);
-                    setSelectedServiceId('');
+                    const newCat = e.target.value;
+                    setSelectedCategory(newCat);
+                    const firstSrv = services.find(s => s.category === newCat);
+                    if (firstSrv) {
+                       setSelectedServiceId(firstSrv.id);
+                    } else {
+                       setSelectedServiceId('');
+                    }
                   }}
                   className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                 >
