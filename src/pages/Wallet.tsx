@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, where, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X } from 'lucide-react';
+import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Transaction {
@@ -24,26 +24,29 @@ export default function Wallet() {
   const [depositAmount, setDepositAmount] = useState('');
   const [proofImage, setProofImage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [submittedAmount, setSubmittedAmount] = useState('');
+
+  const fetchTransactions = async () => {
+    if (!user) return;
+    try {
+      const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      const loadedTransactions = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Transaction));
+      
+      loadedTransactions.sort((a, b) => b.createdAt - a.createdAt);
+      setTransactions(loadedTransactions);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      if (!user) return;
-      try {
-        const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
-        const querySnapshot = await getDocs(q);
-        const loadedTransactions = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Transaction));
-        
-        loadedTransactions.sort((a, b) => b.createdAt - a.createdAt);
-        setTransactions(loadedTransactions);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchTransactions();
   }, [user]);
 
@@ -100,19 +103,23 @@ export default function Wallet() {
     if (!user || !depositAmount || !proofImage) return;
     
     setSubmitting(true);
+    const amountToSave = depositAmount;
     try {
       await addDoc(collection(db, 'transactions'), {
         userId: user.uid,
-        amount: parseFloat(depositAmount),
+        userEmail: user.email || userData?.email || '',
+        amount: parseFloat(amountToSave),
         type: 'deposit',
         status: 'pending',
         proofImage: proofImage,
         createdAt: Date.now()
       });
+      setSubmittedAmount(amountToSave);
+      setShowSuccess(true);
       setDepositAmount('');
       setProofImage(null);
       setStep(1);
-      window.location.reload();
+      fetchTransactions();
     } catch (err) {
       console.error(err);
       alert("Failed to submit request.");
@@ -146,7 +153,29 @@ export default function Wallet() {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Add Funds via UPI</h2>
           
-          {step === 1 ? (
+          {showSuccess ? (
+            <div className="text-center py-6 space-y-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 text-green-600">
+                <Check className="h-6 w-6" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium text-gray-900">Submitted for review</h3>
+                <p className="text-sm text-gray-500">
+                  Your deposit request of <span className="font-semibold text-gray-950">₹{parseFloat(submittedAmount || '0').toFixed(2)}</span> was submitted successfully!
+                </p>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  We are reviewing your payment proof. Once approved by the administrator, the funds will be added to your wallet automatically.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSuccess(false)}
+                className="mt-4 inline-flex justify-center items-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              >
+                Make Another Deposit
+              </button>
+            </div>
+          ) : step === 1 ? (
             <form onSubmit={handleNextStep} className="space-y-4">
               <div className="text-sm text-gray-700 bg-blue-50 p-3 rounded-md">
                 <p>Enter the amount you wish to deposit (Minimum ₹10)</p>

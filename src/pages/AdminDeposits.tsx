@@ -7,6 +7,7 @@ import { Loader2, Check, X, ImageIcon, XCircle } from 'lucide-react';
 interface Transaction {
   id: string;
   userId: string;
+  userEmail?: string;
   amount: number;
   type: string;
   status: string;
@@ -96,7 +97,10 @@ export default function AdminDeposits() {
             transactions.map((tx) => (
               <li key={tx.id} className="p-4 sm:px-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">User ID: <span className="font-mono text-xs">{tx.userId}</span></p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    User: <span className="text-blue-600">{tx.userEmail || "Registered User"}</span>
+                  </p>
+                  <p className="text-xs text-gray-500 font-mono mt-0.5">ID: {tx.userId}</p>
                   <p className="text-sm text-gray-500 mt-1">Amount: <span className="font-bold text-green-600">₹{tx.amount.toFixed(2)}</span></p>
                   <p className="text-xs text-gray-400 mt-1">{new Date(tx.createdAt).toLocaleString()}</p>
                   
