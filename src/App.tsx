@@ -30,11 +30,8 @@ function FullPageLoader() {
 }
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
-
   return (
     <>
-      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       <AuthProvider>
         <FirebaseSyncIndicator />
         <Router>

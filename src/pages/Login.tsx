@@ -11,10 +11,6 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  if (loading) {
-    return null;
-  }
-
   if (user && !loading) {
     if (userData?.role === 'admin') {
       return <Navigate to="/admin" replace />;

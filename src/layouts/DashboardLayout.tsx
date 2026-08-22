@@ -10,11 +10,8 @@ export function DashboardLayout() {
   const { user, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  if (loading) {
-    return null;
-  }
-
-  if (!user) {
+  // If loading is finished and the user is not authenticated, redirect to login
+  if (!loading && !user) {
     return <Navigate to="/login" replace />;
   }
 
