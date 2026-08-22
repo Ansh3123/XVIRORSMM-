@@ -164,7 +164,7 @@ export default function Wallet() {
                   Your deposit request of <span className="font-semibold text-gray-950">₹{parseFloat(submittedAmount || '0').toFixed(2)}</span> was submitted successfully!
                 </p>
                 <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                  We are reviewing your payment proof. Once approved by the administrator, the funds will be added to your wallet automatically.
+                  Your payment status is now <span className="font-semibold text-yellow-600">Pending Verification</span>. Once verified by the admin, the credits will be activated immediately.
                 </p>
               </div>
               <button
@@ -178,11 +178,36 @@ export default function Wallet() {
           ) : step === 1 ? (
             <form onSubmit={handleNextStep} className="space-y-4">
               <div className="text-sm text-gray-700 bg-blue-50 p-3 rounded-md">
-                <p>Enter the amount you wish to deposit (Minimum ₹10)</p>
+                <p>Select a credit package or enter a custom amount to purchase. Minimum ₹10.</p>
+              </div>
+
+              {/* Pre-defined Plans / Packages */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { name: 'Starter Pack', amount: '100', desc: '100 Credits' },
+                  { name: 'Silver Pack', amount: '500', desc: '500 Credits' },
+                  { name: 'Gold Pack', amount: '1000', desc: '1000 Credits' },
+                  { name: 'Platinum Pack', amount: '2000', desc: '2000 Credits' }
+                ].map((pack) => (
+                  <button
+                    key={pack.name}
+                    type="button"
+                    onClick={() => setDepositAmount(pack.amount)}
+                    className={`p-3 text-left border rounded-lg transition-all ${
+                      depositAmount === pack.amount
+                        ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600/20'
+                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold text-gray-500">{pack.name}</p>
+                    <p className="text-lg font-bold text-gray-950 mt-0.5">₹{pack.amount}</p>
+                    <p className="text-2xs text-gray-400">{pack.desc}</p>
+                  </button>
+                ))}
               </div>
               
               <div>
-                <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">Or Enter Custom Amount (₹)</label>
                 <div className="relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <span className="text-gray-500 sm:text-sm">₹</span>
@@ -203,61 +228,90 @@ export default function Wallet() {
               
               <button
                 type="submit"
-                className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 font-semibold"
               >
-                Continue to Payment <ArrowRight className="ml-2 w-4 h-4" />
+                Pay Now <ArrowRight className="ml-2 w-4 h-4" />
               </button>
             </form>
           ) : (
             <form onSubmit={handleDeposit} className="space-y-4">
                <div className="flex justify-between items-center">
-                 <h3 className="text-md font-semibold text-gray-900">Pay ₹{depositAmount}</h3>
+                 <div>
+                   <span className="text-xs font-medium text-blue-600 uppercase tracking-wider">Step 2 of 2</span>
+                   <h3 className="text-md font-semibold text-gray-900">Pay ₹{parseFloat(depositAmount).toFixed(2)}</h3>
+                 </div>
                  <button type="button" onClick={() => setStep(1)} className="text-gray-400 hover:text-gray-500">
                    <X className="w-5 h-5" />
                  </button>
                </div>
 
-               <div className="bg-gray-50 p-4 rounded-md border border-gray-200 space-y-3 text-center">
-                 <p className="text-sm text-gray-700">Open a UPI app to complete payment to:</p>
-                 <p className="font-bold text-lg text-blue-800">{upiId}</p>
+               {/* QR Code and UPI ID info */}
+               <div className="bg-gray-50 p-4 rounded-md border border-gray-200 space-y-4 text-center">
+                 <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm max-w-xs mx-auto">
+                   <p className="text-2xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Scan to Pay via UPI</p>
+                   <img 
+                     src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(getUpiUrl())}`} 
+                     alt="UPI QR Code" 
+                     className="w-44 h-44 object-contain rounded-md"
+                     referrerPolicy="no-referrer"
+                   />
+                   <p className="text-2xs text-gray-400 mt-2">Compatible with any UPI App</p>
+                 </div>
+
+                 <div className="space-y-2">
+                   <p className="text-xs text-gray-500">Or transfer to UPI ID:</p>
+                   <div className="flex items-center justify-center space-x-2">
+                     <span className="font-bold text-sm text-blue-800 bg-blue-50 px-2.5 py-1 rounded border border-blue-100 select-all">{upiId}</span>
+                     <button
+                       type="button"
+                       onClick={() => {
+                         navigator.clipboard.writeText(upiId);
+                         alert("UPI ID copied to clipboard!");
+                       }}
+                       className="text-2xs text-blue-600 hover:underline font-medium"
+                     >
+                       Copy
+                     </button>
+                   </div>
+                 </div>
                  
-                 <div className="flex flex-wrap gap-2 justify-center mt-3">
-                   <a href={getUpiUrl()} className="px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
-                     Open UPI App
+                 <div className="flex flex-wrap gap-2 justify-center pt-1">
+                   <a href={getUpiUrl()} className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-xs font-medium text-white hover:bg-blue-700 transition-colors">
+                     Pay Using UPI App
                    </a>
                  </div>
                </div>
 
                <div>
                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                   Upload Payment Screenshot (Required)
+                   Payment Proof Screenshot <span className="text-red-500">*</span>
                  </label>
-                 <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative">
+                 <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative hover:border-blue-400 transition-colors">
                    <div className="space-y-1 text-center">
                      {proofImage ? (
-                       <img src={proofImage} alt="Proof preview" className="mx-auto h-32 object-contain" />
+                       <img src={proofImage} alt="Proof preview" className="mx-auto h-32 object-contain rounded" />
                      ) : (
                        <Upload className="mx-auto h-12 w-12 text-gray-400" />
                      )}
-                     <div className="flex text-sm text-gray-600 justify-center">
+                     <div className="flex text-sm text-gray-600 justify-center pt-2">
                        <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                         <span>{proofImage ? 'Change Image' : 'Upload a file'}</span>
+                         <span>{proofImage ? 'Change Image' : 'Upload Screenshot'}</span>
                          <input id="file-upload" name="file-upload" type="file" accept="image/*" className="sr-only" onChange={handleImageChange} required={!proofImage} />
                        </label>
                      </div>
-                     {!proofImage && <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>}
+                     {!proofImage && <p className="text-xs text-gray-400">PNG or JPG screenshot</p>}
                    </div>
                  </div>
                </div>
 
-              <button
-                type="submit"
-                disabled={submitting || !proofImage}
-                className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Plus className="w-5 h-5 mr-2" />}
-                Submit Deposit Request
-              </button>
+               <button
+                 type="submit"
+                 disabled={submitting || !proofImage}
+                 className="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-semibold rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+               >
+                 {submitting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Plus className="w-5 h-5 mr-2" />}
+                 Submit Deposit Request
+               </button>
             </form>
           )}
         </div>
@@ -289,8 +343,18 @@ export default function Wallet() {
                     <p className={`text-sm font-semibold ${tx.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
                       {tx.type === 'deposit' ? '+' : '-'}₹{tx.amount.toFixed(2)}
                     </p>
-                    <p className={`text-xs capitalize font-medium ${tx.status === 'pending' ? 'text-yellow-600' : tx.status === 'completed' ? 'text-green-600' : 'text-red-600'}`}>
-                      {tx.status}
+                    <p className={`text-xs font-semibold px-2 py-0.5 rounded-full inline-block mt-1 ${
+                      tx.status === 'pending' 
+                        ? 'bg-yellow-100 text-yellow-800' 
+                        : tx.status === 'completed' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {tx.status === 'pending' 
+                        ? 'Pending Verification' 
+                        : tx.status === 'completed' 
+                        ? 'Approved' 
+                        : 'Rejected'}
                     </p>
                     {tx.status === 'rejected' && tx.rejectReason && (
                        <p className="text-xs text-red-500 mt-1">Reason: {tx.rejectReason}</p>

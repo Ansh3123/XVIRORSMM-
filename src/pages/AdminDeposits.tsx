@@ -119,8 +119,18 @@ export default function AdminDeposits() {
                     </button>
                   )}
                   
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${tx.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : tx.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {tx.status}
+                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
+                    tx.status === 'pending' 
+                      ? 'bg-yellow-100 text-yellow-800' 
+                      : tx.status === 'completed' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {tx.status === 'pending' 
+                      ? 'Pending Verification' 
+                      : tx.status === 'completed' 
+                      ? 'Approved' 
+                      : 'Rejected'}
                   </span>
 
                   {tx.status === 'pending' && (
