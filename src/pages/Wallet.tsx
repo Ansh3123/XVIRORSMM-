@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, where, addDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X, Check } from 'lucide-react';
@@ -16,6 +17,7 @@ interface Transaction {
 
 export default function Wallet() {
   const { user, userData } = useAuth();
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -27,28 +29,42 @@ export default function Wallet() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedAmount, setSubmittedAmount] = useState('');
   const [showReviewPopup, setShowReviewPopup] = useState(false);
+  const [showFundsAddedPopup, setShowFundsAddedPopup] = useState(false);
 
-  const fetchTransactions = async () => {
+  const prevTransactionsRef = useRef<Transaction[]>([]);
+
+  useEffect(() => {
     if (!user) return;
-    try {
-      const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
-      const querySnapshot = await getDocs(q);
-      const loadedTransactions = querySnapshot.docs.map(doc => ({
+    
+    const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedTransactions = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Transaction));
       
       loadedTransactions.sort((a, b) => b.createdAt - a.createdAt);
+      
+      // Check if any transaction transitioned from 'pending' to 'completed' (Approved)
+      if (prevTransactionsRef.current.length > 0) {
+        const approvedTx = loadedTransactions.find(newTx => {
+          const oldTx = prevTransactionsRef.current.find(t => t.id === newTx.id);
+          return oldTx && oldTx.status === 'pending' && newTx.status === 'completed';
+        });
+        if (approvedTx) {
+          setShowFundsAddedPopup(true);
+        }
+      }
+      
+      prevTransactionsRef.current = loadedTransactions;
       setTransactions(loadedTransactions);
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoading(false);
-    }
-  };
+    }, (err) => {
+      console.error(err);
+      setLoading(false);
+    });
 
-  useEffect(() => {
-    fetchTransactions();
+    return () => unsubscribe();
   }, [user]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,10 +136,7 @@ export default function Wallet() {
       setDepositAmount('');
       setProofImage(null);
       setStep(1);
-      fetchTransactions();
-      setTimeout(() => {
-        setShowReviewPopup(true);
-      }, 1000);
+      setShowReviewPopup(true);
     } catch (err) {
       console.error(err);
       alert("Failed to submit request.");
@@ -371,21 +384,44 @@ export default function Wallet() {
         </ul>
       </div>
 
-      {/* Recharge submitted for Admin review Popup */}
+      {/* Request Submitted Popup */}
       {showReviewPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100 text-center animate-scale-in">
-            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Recharge submitted</h3>
-            <p className="text-sm text-gray-500 mb-6">Recharge submitted for Admin review</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Request Submitted</h3>
+            <p className="text-sm text-gray-500 mb-6">Request Submitted waiting for admin's review</p>
             <button
               type="button"
               onClick={() => setShowReviewPopup(false)}
               className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm transition-colors shadow-sm"
             >
               Okay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Funds Added Real-time Popup */}
+      {showFundsAddedPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100 text-center animate-scale-in">
+            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Plus className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Funds Added!</h3>
+            <p className="text-sm text-gray-500 mb-6">funds added continue shopping</p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowFundsAddedPopup(false);
+                navigate('/new-order');
+              }}
+              className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-sm transition-colors shadow-sm"
+            >
+              Continue Shopping
             </button>
           </div>
         </div>
