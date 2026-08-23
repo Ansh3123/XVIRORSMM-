@@ -52,13 +52,14 @@ service cloud.firestore {
 
     function isValidTransaction(data) {
       return data.keys().hasAll(['userId', 'amount', 'type', 'status', 'createdAt'])
-        && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
+        && data.userId is string && data.userId.size() <= 128
         && data.amount is number
         && data.type is string && (data.type == 'deposit' || data.type == 'refund' || data.type == 'charge')
         && data.status is string && (data.status == 'pending' || data.status == 'completed' || data.status == 'failed' || data.status == 'rejected')
         && data.createdAt is number
-        && (!('proofImage' in data.keys()) || (data.proofImage is string && data.proofImage.size() <= 1048576)) // 1MB for base64 image
-        && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000));
+        && (!('proofImage' in data.keys()) || (data.proofImage is string && data.proofImage.size() <= 10485760)) // Up to 10MB
+        && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000))
+        && (!('userEmail' in data.keys()) || (data.userEmail is string && data.userEmail.size() <= 255));
     }
 
     function isValidTicket(data) {
@@ -131,10 +132,11 @@ service cloud.firestore {
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isValidId(transactionId) && isSignedIn() 
                     && isValidTransaction(incoming())
+                    && incoming().userId == request.auth.uid
                     // Users can only create pending deposits
                     && incoming().status == 'pending'
                     && incoming().type == 'deposit';
-      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming());
+      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming()) && incoming().userId == existing().userId;
     }
 
     match /tickets/{ticketId} {

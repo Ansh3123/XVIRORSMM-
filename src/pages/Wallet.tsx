@@ -374,7 +374,9 @@ export default function Wallet() {
                         : 'Rejected'}
                     </p>
                     {tx.status === 'rejected' && tx.rejectReason && (
-                       <p className="text-xs text-red-500 mt-1">Reason: {tx.rejectReason}</p>
+                       <p className="text-xs text-red-500 mt-1.5 font-medium bg-red-50 px-2.5 py-1.5 rounded-md border border-red-100 max-w-xs sm:max-w-md">
+                         Your recharge request is rejected due to: <span className="font-semibold">{tx.rejectReason}</span>
+                       </p>
                     )}
                   </div>
                 </div>
