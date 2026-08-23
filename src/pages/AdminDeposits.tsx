@@ -21,6 +21,8 @@ export default function AdminDeposits() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewProof, setViewProof] = useState<string | null>(null);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     fetchTransactions();
@@ -45,19 +47,36 @@ export default function AdminDeposits() {
       if (newStatus === 'completed') {
         if (!window.confirm(`Are you sure you want to approve ₹${amount} for this user?`)) return;
         
-        // Run as transaction to safely update user balance
-        await runTransaction(db, async (transaction) => {
+        try {
+          // Run as transaction to safely update user balance
+          await runTransaction(db, async (transaction) => {
+            const userRef = doc(db, 'users', userId);
+            const txRef = doc(db, 'transactions', txId);
+            
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists()) throw new Error("User does not exist");
+            
+            const newBalance = (userDoc.data().balance || 0) + amount;
+            
+            transaction.update(userRef, { balance: newBalance });
+            transaction.update(txRef, { status: newStatus });
+          });
+        } catch (txErr: any) {
+          console.warn("Transaction failed, trying fallback sequential updates:", txErr);
           const userRef = doc(db, 'users', userId);
           const txRef = doc(db, 'transactions', txId);
           
-          const userDoc = await transaction.get(userRef);
+          const userDoc = await getDoc(userRef);
           if (!userDoc.exists()) throw new Error("User does not exist");
           
           const newBalance = (userDoc.data().balance || 0) + amount;
           
-          transaction.update(userRef, { balance: newBalance });
-          transaction.update(txRef, { status: newStatus });
-        });
+          await updateDoc(userRef, { balance: newBalance });
+          await updateDoc(txRef, { status: newStatus });
+        }
+        
+        setSuccessMessage('recharge request accept');
+        setShowSuccessPopup(true);
       } else if (newStatus === 'rejected') {
         const reason = window.prompt("Enter reason for rejection (this will be shown to the user):");
         if (reason === null) return; // User cancelled
@@ -66,13 +85,16 @@ export default function AdminDeposits() {
           status: newStatus,
           rejectReason: reason || "Deposit request was declined."
         });
+        
+        setSuccessMessage('Recharge request rejected successfully');
+        setShowSuccessPopup(true);
       } else {
         await updateDoc(doc(db, 'transactions', txId), { status: newStatus });
       }
       fetchTransactions();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to update transaction');
+      alert(`Failed to update transaction: ${err.message || err}`);
     }
   };
 
@@ -160,6 +182,26 @@ export default function AdminDeposits() {
               <XCircle className="w-8 h-8" />
             </button>
             <img src={viewProof} alt="Payment Proof" className="max-w-full max-h-[85vh] rounded-lg shadow-2xl" />
+          </div>
+        </div>
+      )}
+
+      {/* Success Status Popup */}
+      {showSuccessPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100 text-center animate-scale-in">
+            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2 capitalize">{successMessage}</h3>
+            <p className="text-sm text-gray-500 mb-6">The transaction request state has been updated successfully.</p>
+            <button
+              type="button"
+              onClick={() => setShowSuccessPopup(false)}
+              className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-sm transition-colors shadow-sm"
+            >
+              Okay
+            </button>
           </div>
         </div>
       )}

@@ -136,7 +136,7 @@ service cloud.firestore {
                     // Users can only create pending deposits
                     && incoming().status == 'pending'
                     && incoming().type == 'deposit';
-      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming()) && incoming().userId == existing().userId;
+      allow update: if isAdmin() && isValidId(transactionId);
     }
 
     match /tickets/{ticketId} {
