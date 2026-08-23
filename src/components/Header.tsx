@@ -108,7 +108,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-10 md:ml-64">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
       <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex flex-1 items-center md:hidden">
           <button

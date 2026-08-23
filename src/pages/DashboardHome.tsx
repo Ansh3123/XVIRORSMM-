@@ -14,7 +14,7 @@ export default function DashboardHome() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 md:ml-64">
+    <div className="max-w-7xl mx-auto space-y-6">
       <div className="mt-2">
         <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Order</h3>
         <NewOrderContent isWidget={true} />

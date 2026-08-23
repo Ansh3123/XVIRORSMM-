@@ -65,7 +65,7 @@ export default function Tickets() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto md:ml-64 px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Support Tickets</h1>
         <p className="mt-2 text-sm text-gray-500">Need help? Contact XvirorSMM Support on Telegram <a href="https://t.me/Deleaxy" className="text-blue-600 hover:text-blue-500 font-medium">@Deleaxy</a> or open a ticket.</p>

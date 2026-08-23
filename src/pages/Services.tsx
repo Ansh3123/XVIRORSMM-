@@ -166,7 +166,7 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
 
 export default function Services() {
   return (
-    <div className="md:ml-64">
+    <div>
       <ServicesContent />
     </div>
   );

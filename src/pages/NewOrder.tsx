@@ -307,7 +307,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
 
 export default function NewOrder() {
   return (
-    <div className="md:ml-64">
+    <div>
       <NewOrderContent />
     </div>
   );

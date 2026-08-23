@@ -46,7 +46,7 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto md:ml-64 px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Manage Users</h1>
         <p className="text-gray-500 text-sm mt-1">View users and update balances manually.</p>
