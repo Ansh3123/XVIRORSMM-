@@ -36,20 +36,27 @@ export default function Wallet() {
   useEffect(() => {
     if (!user) return;
     
-    const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
+    const q = query(collection(db, 'rechargeRequests'), where('userId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedTransactions = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Transaction));
+      const loadedTransactions = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          amount: data.amount,
+          type: 'deposit',
+          status: data.status,
+          createdAt: data.createdAt,
+          rejectReason: data.rejectReason
+        } as Transaction;
+      });
       
       loadedTransactions.sort((a, b) => b.createdAt - a.createdAt);
       
-      // Check if any transaction transitioned from 'pending' to 'completed' (Approved)
+      // Check if any transaction transitioned from 'pending' to 'completed' / 'accepted' (Approved)
       if (prevTransactionsRef.current.length > 0) {
         const approvedTx = loadedTransactions.find(newTx => {
           const oldTx = prevTransactionsRef.current.find(t => t.id === newTx.id);
-          return oldTx && oldTx.status === 'pending' && newTx.status === 'completed';
+          return oldTx && oldTx.status === 'pending' && (newTx.status === 'completed' || newTx.status === 'accepted');
         });
         if (approvedTx) {
           setShowFundsAddedPopup(true);
@@ -122,11 +129,10 @@ export default function Wallet() {
     setSubmitting(true);
     const amountToSave = depositAmount;
     try {
-      await addDoc(collection(db, 'transactions'), {
+      await addDoc(collection(db, 'rechargeRequests'), {
         userId: user.uid,
         userEmail: user.email || userData?.email || '',
         amount: parseFloat(amountToSave),
-        type: 'deposit',
         status: 'pending',
         proofImage: proofImage,
         createdAt: Date.now()
@@ -363,13 +369,13 @@ export default function Wallet() {
                     <p className={`text-xs font-semibold px-2 py-0.5 rounded-full inline-block mt-1 ${
                       tx.status === 'pending' 
                         ? 'bg-yellow-100 text-yellow-800' 
-                        : tx.status === 'completed' 
+                        : (tx.status === 'completed' || tx.status === 'accepted')
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-red-100 text-red-800'
                     }`}>
                       {tx.status === 'pending' 
                         ? 'Pending Verification' 
-                        : tx.status === 'completed' 
+                        : (tx.status === 'completed' || tx.status === 'accepted')
                         ? 'Approved' 
                         : 'Rejected'}
                     </p>

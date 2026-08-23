@@ -78,6 +78,19 @@ service cloud.firestore {
         && data.createdAt is number;
     }
 
+    function isValidRechargeRequest(data) {
+      return data.keys().hasAll(['userId', 'amount', 'status', 'createdAt'])
+        && data.userId is string && data.userId.size() <= 128
+        && data.amount is number
+        && data.status is string && (data.status == 'pending' || data.status == 'accepted' || data.status == 'rejected')
+        && data.createdAt is number
+        && (!('proofImage' in data.keys()) || (data.proofImage is string && data.proofImage.size() <= 10485760))
+        && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000))
+        && (!('userEmail' in data.keys()) || (data.userEmail is string && data.userEmail.size() <= 255))
+        && (!('processedAt' in data.keys()) || data.processedAt is number)
+        && (!('processedBy' in data.keys()) || (data.processedBy is string && data.processedBy.size() <= 128));
+    }
+
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
@@ -108,8 +121,7 @@ service cloud.firestore {
 
     match /services/{serviceId} {
       allow get: if isValidId(serviceId);
-      // Users can only read active services, unless they are admin.
-      allow list: if isAdmin() || (isSignedIn() && resource.data.status == 'active');
+      allow list: if isSignedIn();
       allow create: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
       allow update: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
       allow delete: if isAdmin() && isValidId(serviceId);
@@ -137,6 +149,16 @@ service cloud.firestore {
                     && incoming().status == 'pending'
                     && incoming().type == 'deposit';
       allow update: if isAdmin() && isValidId(transactionId);
+    }
+
+    match /rechargeRequests/{requestId} {
+      allow get: if isValidId(requestId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(requestId) && isSignedIn() 
+                    && isValidRechargeRequest(incoming())
+                    && incoming().userId == request.auth.uid
+                    && incoming().status == 'pending';
+      allow update: if isAdmin() && isValidId(requestId);
     }
 
     match /tickets/{ticketId} {
