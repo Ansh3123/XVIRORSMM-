@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, getDocs, where, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Order {
@@ -20,6 +20,7 @@ export default function Orders() {
   const isAdmin = userData?.role === 'admin';
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -59,11 +60,34 @@ export default function Orders() {
     }
   };
 
+  const filteredOrders = orders.filter(order => {
+    const searchLower = searchTerm.toLowerCase();
+    return order.id.toLowerCase().includes(searchLower) ||
+           order.serviceId.toLowerCase().includes(searchLower) ||
+           order.link.toLowerCase().includes(searchLower);
+  });
+
   return (
     <div className="max-w-7xl mx-auto md:ml-64 px-4 sm:px-6 lg:px-8 py-8">
       <div className="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Order History</h1>
+          <p className="mt-1 text-sm text-gray-500">View and track all SMM campaigns submitted on your account.</p>
+        </div>
+      </div>
+
+      <div className="mb-6 max-w-sm">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Search orders (ID, Link, Service ID)..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
       </div>
 
@@ -89,16 +113,16 @@ export default function Orders() {
                         <Loader2 className="mx-auto h-8 w-8 text-gray-400 animate-spin" />
                       </td>
                     </tr>
-                  ) : orders.length === 0 ? (
+                  ) : filteredOrders.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
-                        No orders found.
+                        No orders matched your search criteria.
                       </td>
                     </tr>
                   ) : (
-                    orders.map((order) => (
+                    filteredOrders.map((order) => (
                       <tr key={order.id}>
-                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{order.id.slice(0, 8)}...</td>
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{order.id}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           {format(order.createdAt, 'MMM d, yyyy HH:mm')}
                         </td>

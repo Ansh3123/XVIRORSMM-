@@ -32,6 +32,7 @@ export default function Login() {
     } catch (err: any) {
       console.error(err);
       const code = err.code || '';
+      const message = err.message || '';
       if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
         setError('Invalid email or password.');
       } else if (code === 'auth/email-already-in-use') {
@@ -40,8 +41,10 @@ export default function Login() {
         setError('Password should be at least 6 characters.');
       } else if (code === 'auth/too-many-requests') {
         setError('Too many attempts. Please try again later.');
+      } else if (code === 'auth/operation-not-allowed') {
+        setError('Email/Password sign-in is not enabled. Please go to your Firebase Console -> Authentication -> Sign-in method, and enable "Email/Password".');
       } else {
-        setError('Authentication failed. Please check your details.');
+        setError(`Authentication failed: ${message} (Code: ${code}). Please verify your Firebase project settings.`);
       }
     } finally {
       setIsSigningIn(false);
@@ -57,11 +60,16 @@ export default function Login() {
     } catch (err: any) {
       console.error(err);
       const code = err.code || '';
+      const message = err.message || '';
       // Ignore if user just closed the popup
       if (code === 'auth/popup-closed-by-user') {
         setError('');
+      } else if (code === 'auth/operation-not-allowed') {
+        setError('Google Sign-In is not enabled. Please go to your Firebase Console -> Authentication -> Sign-in method, and enable "Google" provider.');
+      } else if (code === 'auth/unauthorized-domain') {
+        setError(`This domain is not authorized. Please add "${window.location.hostname}" to the Authorized Domains list in your Firebase Console under Authentication -> Settings.`);
       } else {
-        setError('Google Authentication failed. Please try again.');
+        setError(`Google Authentication failed: ${message} (Code: ${code}). Please verify your Firebase project settings.`);
       }
     } finally {
       setIsSigningIn(false);
