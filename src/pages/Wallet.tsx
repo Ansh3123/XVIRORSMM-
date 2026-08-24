@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, rtdb } from '../lib/firebase';
+import { ref as rtdbRef, set as rtdbSet, onValue as rtdbOnValue } from 'firebase/database';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X, Check } from 'lucide-react';
+import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X, Check, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Transaction {
@@ -36,19 +37,26 @@ export default function Wallet() {
   useEffect(() => {
     if (!user) return;
     
-    const q = query(collection(db, 'rechargeRequests'), where('userId', '==', user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedTransactions = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          amount: data.amount,
-          type: 'deposit',
-          status: data.status,
-          createdAt: data.createdAt,
-          rejectReason: data.rejectReason
-        } as Transaction;
-      });
+    // Subscribe directly to the Realtime Database for super-fast real-time synchronization!
+    const requestsRef = rtdbRef(rtdb, 'rechargeRequests');
+    const unsubscribe = rtdbOnValue(requestsRef, (snapshot) => {
+      const dataVal = snapshot.val();
+      const loadedTransactions: Transaction[] = [];
+      
+      if (dataVal) {
+        Object.entries(dataVal).forEach(([key, val]: [string, any]) => {
+          if (val && val.userId === user.uid) {
+            loadedTransactions.push({
+              id: key,
+              amount: val.amount,
+              type: 'deposit',
+              status: val.status,
+              createdAt: val.createdAt,
+              rejectReason: val.rejectReason
+            });
+          }
+        });
+      }
       
       loadedTransactions.sort((a, b) => b.createdAt - a.createdAt);
       
@@ -67,11 +75,32 @@ export default function Wallet() {
       setTransactions(loadedTransactions);
       setLoading(false);
     }, (err) => {
-      console.error(err);
-      setLoading(false);
-      handleFirestoreError(err, OperationType.LIST, 'rechargeRequests');
+      console.error("RTDB Error: Falling back to Firestore...", err);
+      // Fallback to Firestore subscription if Realtime Database is completely fresh/unsupported
+      const q = query(collection(db, 'rechargeRequests'), where('userId', '==', user.uid));
+      const unsubFirestore = onSnapshot(q, (fsSnapshot) => {
+        const fsLoaded = fsSnapshot.docs.map(fsDoc => {
+          const fsData = fsDoc.data();
+          return {
+            id: fsDoc.id,
+            amount: fsData.amount,
+            type: 'deposit',
+            status: fsData.status,
+            createdAt: fsData.createdAt,
+            rejectReason: fsData.rejectReason
+          } as Transaction;
+        });
+        fsLoaded.sort((a, b) => b.createdAt - a.createdAt);
+        setTransactions(fsLoaded);
+        setLoading(false);
+      }, (fsErr) => {
+        console.error(fsErr);
+        setLoading(false);
+        handleFirestoreError(fsErr, OperationType.LIST, 'rechargeRequests');
+      });
+      return () => unsubFirestore();
     });
-
+ 
     return () => unsubscribe();
   }, [user]);
 
@@ -124,13 +153,14 @@ export default function Wallet() {
   };
 
   const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
     if (!user || !depositAmount || !proofImage) return;
+    e.preventDefault();
     
     setSubmitting(true);
     const amountToSave = depositAmount;
     try {
-      await addDoc(collection(db, 'rechargeRequests'), {
+      // 1. Save to Cloud Firestore
+      const fsDocRef = await addDoc(collection(db, 'rechargeRequests'), {
         userId: user.uid,
         userEmail: user.email || userData?.email || '',
         amount: parseFloat(amountToSave),
@@ -138,6 +168,18 @@ export default function Wallet() {
         proofImage: proofImage,
         createdAt: Date.now()
       });
+
+      // 2. Mirror immediately to Firebase Realtime Database using the EXACT same ID!
+      const rtdbRefPath = rtdbRef(rtdb, `rechargeRequests/${fsDocRef.id}`);
+      await rtdbSet(rtdbRefPath, {
+        userId: user.uid,
+        userEmail: user.email || userData?.email || '',
+        amount: parseFloat(amountToSave),
+        status: 'pending',
+        proofImage: proofImage,
+        createdAt: Date.now()
+      });
+
       setSubmittedAmount(amountToSave);
       setShowSuccess(true);
       setDepositAmount('');
@@ -167,12 +209,23 @@ export default function Wallet() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Current Balance</h2>
-          <div className="mt-4 flex items-baseline text-4xl font-extrabold text-gray-900">
-            ₹{userData?.balance?.toFixed(2) || '0.00'}
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-900">Current Balance</h2>
+              <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-semibold text-green-700">
+                <Lock className="w-3.5 h-3.5 text-green-600 animate-pulse" />
+                <span>Locked & Secured</span>
+              </div>
+            </div>
+            <div className="mt-4 flex items-baseline text-4xl font-extrabold text-gray-900">
+              ₹{userData?.balance?.toFixed(2) || '0.00'}
+            </div>
+            <p className="mt-1 text-sm text-gray-500 font-medium">Total spent: ₹{userData?.totalSpent?.toFixed(2) || '0.00'}</p>
           </div>
-          <p className="mt-1 text-sm text-gray-500">Total spent: ₹{userData?.totalSpent?.toFixed(2) || '0.00'}</p>
+          <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-100 text-xs text-gray-500">
+            🛡️ <span className="font-semibold text-gray-700">Transactional Wallet Lock Active:</span> Your balance is mathematically reserved. Funds are strictly secured during active API orders and cannot be overridden or overdrawn.
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">

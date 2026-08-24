@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, getDocs, query } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
@@ -142,20 +142,77 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
     setSuccess('');
 
     try {
-      const apiResponse = await fetch('/api/smm/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service: selectedService.id,
-          link,
-          quantity: qty
-        })
+      const userRef = doc(db, 'users', user.uid);
+      
+      // 1. Transactionally lock and deduct the balance
+      await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error("User record does not exist.");
+        }
+        
+        const currentBalance = userSnap.data().balance || 0;
+        const currentTotalSpent = userSnap.data().totalSpent || 0;
+        
+        if (currentBalance < charge) {
+          throw new Error("Insufficient balance. Please add funds to your wallet.");
+        }
+        
+        // Deduct balance and increment totalSpent atomically
+        transaction.update(userRef, {
+          balance: currentBalance - charge,
+          totalSpent: currentTotalSpent + charge,
+          updatedAt: Date.now()
+        });
       });
 
+      // 2. Call the provider API
+      let apiResponse;
+      try {
+        apiResponse = await fetch('/api/smm/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service: selectedService.id,
+            link,
+            quantity: qty
+          })
+        });
+      } catch (apiErr) {
+        // Safe refund if fetch itself fails or times out
+        await runTransaction(db, async (refundTx) => {
+          const userSnap = await refundTx.get(userRef);
+          if (userSnap.exists()) {
+            const currentBalance = userSnap.data().balance || 0;
+            const currentTotalSpent = userSnap.data().totalSpent || 0;
+            refundTx.update(userRef, {
+              balance: currentBalance + charge,
+              totalSpent: Math.max(0, currentTotalSpent - charge),
+              updatedAt: Date.now()
+            });
+          }
+        });
+        throw apiErr;
+      }
+
       if (!apiResponse.ok) {
+        // Safe refund if SMM provider rejects the order
+        await runTransaction(db, async (refundTx) => {
+          const userSnap = await refundTx.get(userRef);
+          if (userSnap.exists()) {
+            const currentBalance = userSnap.data().balance || 0;
+            const currentTotalSpent = userSnap.data().totalSpent || 0;
+            refundTx.update(userRef, {
+              balance: currentBalance + charge,
+              totalSpent: Math.max(0, currentTotalSpent - charge),
+              updatedAt: Date.now()
+            });
+          }
+        });
         throw new Error('API Provider failed to process order');
       }
 
+      // 3. Document the successful order
       await addDoc(collection(db, 'orders'), {
         userId: user.uid,
         serviceId: selectedService.id,
@@ -166,12 +223,13 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
-      setSuccess('Order placed successfully!');
+      
+      setSuccess('Order placed successfully! Balance deducted.');
       setLink('');
       setQuantity('');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Failed to place order with provider. Please try again.');
+      setError(err.message || 'Failed to place order with provider. Please try again.');
     } finally {
       setSubmitting(false);
     }

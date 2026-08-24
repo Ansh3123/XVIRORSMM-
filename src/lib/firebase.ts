@@ -1,10 +1,18 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Realtime Database. Since the app is hosted in asia-southeast1,
+// we prioritize the standard default URL first, but support the regional one too.
+const databaseURL = (firebaseConfig as any).databaseURL || 
+  `https://${firebaseConfig.projectId}-default-rtdb.firebaseio.com/`;
+
+export const rtdb = getDatabase(app, databaseURL);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

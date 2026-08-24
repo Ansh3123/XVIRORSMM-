@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, rtdb } from '../lib/firebase';
+import { ref as rtdbRef, update as rtdbUpdate, onValue as rtdbOnValue } from 'firebase/database';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, Check, X, ImageIcon, XCircle, AlertCircle } from 'lucide-react';
 
@@ -38,26 +39,49 @@ export default function AdminDeposits() {
   const [processing, setProcessing] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Live real-time Firestore listener
+  // Live real-time Realtime Database listener
   useEffect(() => {
     if (userData?.role !== 'admin') return;
 
     setError(null);
-    const q = query(collection(db, 'rechargeRequests'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loaded = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as RechargeRequest));
+    const requestsRef = rtdbRef(rtdb, 'rechargeRequests');
+    const unsubscribe = rtdbOnValue(requestsRef, (snapshot) => {
+      const dataVal = snapshot.val();
+      const loaded: RechargeRequest[] = [];
+      
+      if (dataVal) {
+        Object.entries(dataVal).forEach(([key, val]: [string, any]) => {
+          if (val) {
+            loaded.push({
+              id: key,
+              ...val
+            } as RechargeRequest);
+          }
+        });
+      }
       
       loaded.sort((a, b) => b.createdAt - a.createdAt);
       setRequests(loaded);
       setLoading(false);
     }, (err: any) => {
-      console.error("Firestore real-time listener error:", err);
-      setError(err.message || String(err));
-      setLoading(false);
-      handleFirestoreError(err, OperationType.LIST, 'rechargeRequests');
+      console.error("RTDB Realtime Admin error: Falling back to Firestore...", err);
+      // Fallback to Firestore real-time listener
+      const q = query(collection(db, 'rechargeRequests'));
+      const unsubFirestore = onSnapshot(q, (snapshot) => {
+        const loaded = snapshot.docs.map(fsDoc => ({
+          id: fsDoc.id,
+          ...fsDoc.data()
+        } as RechargeRequest));
+        loaded.sort((a, b) => b.createdAt - a.createdAt);
+        setRequests(loaded);
+        setLoading(false);
+      }, (fsErr: any) => {
+        console.error("Firestore real-time listener error:", fsErr);
+        setError(fsErr.message || String(fsErr));
+        setLoading(false);
+        handleFirestoreError(fsErr, OperationType.LIST, 'rechargeRequests');
+      });
+      return () => unsubFirestore();
     });
 
     return () => unsubscribe();
@@ -113,14 +137,22 @@ export default function AdminDeposits() {
         const currentBalance = userDoc.exists() ? (userDoc.data().balance || 0) : 0;
         const newBalance = currentBalance + amount;
         
-        // 1. Update user balance
+        // 1. Update user balance in Firestore
         await updateDoc(userRef, { 
           balance: newBalance,
           updatedAt: Date.now()
         });
 
-        // 2. Update recharge request status
+        // 2. Update recharge request status in Firestore
         await updateDoc(reqRef, {
+          status: 'accepted',
+          processedAt: Date.now(),
+          processedBy: adminId
+        });
+
+        // 3. Mirror status update immediately in Firebase Realtime Database
+        const rtdbRequestRef = rtdbRef(rtdb, `rechargeRequests/${txId}`);
+        await rtdbUpdate(rtdbRequestRef, {
           status: 'accepted',
           processedAt: Date.now(),
           processedBy: adminId
@@ -139,8 +171,17 @@ export default function AdminDeposits() {
           throw new Error("This request has already been processed by another administrator/device.");
         }
 
-        // Direct update for reject
+        // 1. Direct update for reject in Firestore
         await updateDoc(reqRef, {
+          status: 'rejected',
+          rejectReason: rejectReason || "Deposit request was declined.",
+          processedAt: Date.now(),
+          processedBy: adminId
+        });
+
+        // 2. Mirror status update immediately in Firebase Realtime Database
+        const rtdbRequestRef = rtdbRef(rtdb, `rechargeRequests/${txId}`);
+        await rtdbUpdate(rtdbRequestRef, {
           status: 'rejected',
           rejectReason: rejectReason || "Deposit request was declined.",
           processedAt: Date.now(),
