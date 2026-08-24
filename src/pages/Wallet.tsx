@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, Plus, ArrowUpRight, ArrowDownLeft, Upload, ArrowRight, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
@@ -69,6 +69,7 @@ export default function Wallet() {
     }, (err) => {
       console.error(err);
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'rechargeRequests');
     });
 
     return () => unsubscribe();
@@ -146,6 +147,7 @@ export default function Wallet() {
     } catch (err) {
       console.error(err);
       alert("Failed to submit request.");
+      handleFirestoreError(err, OperationType.CREATE, 'rechargeRequests');
     } finally {
       setSubmitting(false);
     }

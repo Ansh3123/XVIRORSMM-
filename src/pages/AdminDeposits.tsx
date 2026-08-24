@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, Check, X, ImageIcon, XCircle, AlertCircle } from 'lucide-react';
 
@@ -57,6 +57,7 @@ export default function AdminDeposits() {
       console.error("Firestore real-time listener error:", err);
       setError(err.message || String(err));
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'rechargeRequests');
     });
 
     return () => unsubscribe();
@@ -155,6 +156,7 @@ export default function AdminDeposits() {
     } catch (err: any) {
       console.error(err);
       alert(`Error processing request: ${err.message || err}`);
+      handleFirestoreError(err, OperationType.UPDATE, `rechargeRequests/${txId}`);
     } finally {
       setProcessing(false);
     }

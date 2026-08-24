@@ -8,7 +8,7 @@ import {
   signInWithPopup
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db, googleProvider } from '../lib/firebase';
+import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
 
 interface UserData {
   role: 'user' | 'admin';
@@ -63,11 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }).then(() => {
               setUserData(newUserData);
               setLoading(false);
+            }).catch((err) => {
+              handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}`);
             });
           }
         }, (error) => {
            console.error("Error fetching user data:", error);
            setLoading(false);
+           handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         });
         
         // We could store the unsubDoc to clean it up when auth state changes, 
