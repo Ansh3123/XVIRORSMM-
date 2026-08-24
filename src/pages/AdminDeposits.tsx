@@ -94,6 +94,9 @@ export default function AdminDeposits() {
       const userRef = doc(db, 'users', userId);
 
       if (type === 'accept') {
+        // Wait exactly 2 seconds as requested by the user
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
         // Direct non-transaction updates as requested by user
         const reqDoc = await getDoc(reqRef);
         if (!reqDoc.exists()) {
@@ -122,7 +125,7 @@ export default function AdminDeposits() {
           processedBy: adminId
         });
         
-        setSuccessMessage('recharge request accept');
+        setSuccessMessage('admin credited');
         setShowSuccessPopup(true);
       } else if (type === 'reject') {
         const reqDoc = await getDoc(reqRef);
@@ -342,7 +345,10 @@ export default function AdminDeposits() {
                 disabled={processing}
               >
                 {processing ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {confirmState.type === 'accept' ? 'Crediting in 2s...' : 'Rejecting...'}
+                  </span>
                 ) : confirmState.type === 'accept' ? (
                   'Confirm Accept'
                 ) : (
@@ -362,7 +368,11 @@ export default function AdminDeposits() {
               <Check className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-2 capitalize">{successMessage}</h3>
-            <p className="text-sm text-gray-500 mb-6">The transaction request state has been updated successfully.</p>
+            <p className="text-sm text-gray-500 mb-6">
+              {successMessage === 'admin credited'
+                ? "Funds have been credited directly into the user's wallet via Firebase Firestore."
+                : "The request state has been updated successfully."}
+            </p>
             <button
               type="button"
               onClick={() => setShowSuccessPopup(false)}
