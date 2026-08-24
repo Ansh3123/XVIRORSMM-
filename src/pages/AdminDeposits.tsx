@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, runTransaction } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, Check, X, ImageIcon, XCircle } from 'lucide-react';
+import { Loader2, Check, X, ImageIcon, XCircle, AlertCircle } from 'lucide-react';
 
 interface RechargeRequest {
   id: string;
@@ -21,6 +21,7 @@ export default function AdminDeposits() {
   const { userData } = useAuth();
   const [requests, setRequests] = useState<RechargeRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewProof, setViewProof] = useState<string | null>(null);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -41,6 +42,7 @@ export default function AdminDeposits() {
   useEffect(() => {
     if (userData?.role !== 'admin') return;
 
+    setError(null);
     const q = query(collection(db, 'rechargeRequests'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loaded = snapshot.docs.map(doc => ({
@@ -51,8 +53,9 @@ export default function AdminDeposits() {
       loaded.sort((a, b) => b.createdAt - a.createdAt);
       setRequests(loaded);
       setLoading(false);
-    }, (err) => {
+    }, (err: any) => {
       console.error("Firestore real-time listener error:", err);
+      setError(err.message || String(err));
       setLoading(false);
     });
 
@@ -87,59 +90,57 @@ export default function AdminDeposits() {
     const adminId = userData.uid || 'admin';
     
     try {
+      const reqRef = doc(db, 'rechargeRequests', txId);
+      const userRef = doc(db, 'users', userId);
+
       if (type === 'accept') {
-        // Run as Firestore Transaction for absolute Duplicate Protection
-        await runTransaction(db, async (transaction) => {
-          const reqRef = doc(db, 'rechargeRequests', txId);
-          const reqDoc = await transaction.get(reqRef);
-          if (!reqDoc.exists()) {
-            throw new Error("Recharge request document does not exist.");
-          }
-          
-          const reqData = reqDoc.data();
-          if (reqData.status !== 'pending') {
-            throw new Error("This request has already been processed by another administrator/device.");
-          }
-          
-          const userRef = doc(db, 'users', userId);
-          const userDoc = await transaction.get(userRef);
-          if (!userDoc.exists()) {
-            throw new Error("User profile not found.");
-          }
-          
-          const currentBalance = userDoc.data().balance || 0;
-          const newBalance = currentBalance + amount;
-          
-          transaction.update(userRef, { balance: newBalance });
-          transaction.update(reqRef, {
-            status: 'accepted',
-            processedAt: Date.now(),
-            processedBy: adminId
-          });
+        // Direct non-transaction updates as requested by user
+        const reqDoc = await getDoc(reqRef);
+        if (!reqDoc.exists()) {
+          throw new Error("Recharge request document does not exist.");
+        }
+        
+        const reqData = reqDoc.data();
+        if (reqData.status !== 'pending') {
+          throw new Error("This request has already been processed by another administrator/device.");
+        }
+        
+        const userDoc = await getDoc(userRef);
+        const currentBalance = userDoc.exists() ? (userDoc.data().balance || 0) : 0;
+        const newBalance = currentBalance + amount;
+        
+        // 1. Update user balance
+        await updateDoc(userRef, { 
+          balance: newBalance,
+          updatedAt: Date.now()
+        });
+
+        // 2. Update recharge request status
+        await updateDoc(reqRef, {
+          status: 'accepted',
+          processedAt: Date.now(),
+          processedBy: adminId
         });
         
         setSuccessMessage('recharge request accept');
         setShowSuccessPopup(true);
       } else if (type === 'reject') {
-        // Run as Firestore Transaction for rejecting safely
-        await runTransaction(db, async (transaction) => {
-          const reqRef = doc(db, 'rechargeRequests', txId);
-          const reqDoc = await transaction.get(reqRef);
-          if (!reqDoc.exists()) {
-            throw new Error("Recharge request document does not exist.");
-          }
-          
-          const reqData = reqDoc.data();
-          if (reqData.status !== 'pending') {
-            throw new Error("This request has already been processed by another administrator/device.");
-          }
-          
-          transaction.update(reqRef, {
-            status: 'rejected',
-            rejectReason: rejectReason || "Deposit request was declined.",
-            processedAt: Date.now(),
-            processedBy: adminId
-          });
+        const reqDoc = await getDoc(reqRef);
+        if (!reqDoc.exists()) {
+          throw new Error("Recharge request document does not exist.");
+        }
+        
+        const reqData = reqDoc.data();
+        if (reqData.status !== 'pending') {
+          throw new Error("This request has already been processed by another administrator/device.");
+        }
+
+        // Direct update for reject
+        await updateDoc(reqRef, {
+          status: 'rejected',
+          rejectReason: rejectReason || "Deposit request was declined.",
+          processedAt: Date.now(),
+          processedBy: adminId
         });
         
         setSuccessMessage('Recharge request rejected successfully');
@@ -166,6 +167,17 @@ export default function AdminDeposits() {
         <h1 className="text-2xl font-bold text-gray-900">Wallet Requests</h1>
         <p className="text-gray-500 text-sm mt-1">Manage user deposit requests and review payment proofs in real-time.</p>
       </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-sm">Database Load Error</p>
+            <p className="text-xs opacity-90 mt-0.5">{error}</p>
+            <p className="text-xs opacity-75 mt-2">Please ensure security rules are successfully deployed for your custom Firestore database.</p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white shadow overflow-hidden sm:rounded-md border border-gray-100">
         <ul className="divide-y divide-gray-200">
