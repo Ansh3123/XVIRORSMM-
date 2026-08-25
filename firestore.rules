@@ -84,7 +84,9 @@ service cloud.firestore {
         && data.amount is number
         && data.status is string && (data.status == 'pending' || data.status == 'accepted' || data.status == 'rejected')
         && data.createdAt is number
+        && (!('updatedAt' in data.keys()) || data.updatedAt is number)
         && (!('proofImage' in data.keys()) || (data.proofImage is string && data.proofImage.size() <= 10485760))
+        && (!('paymentProof' in data.keys()) || (data.paymentProof is string && data.paymentProof.size() <= 10485760))
         && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000))
         && (!('userEmail' in data.keys()) || (data.userEmail is string && data.userEmail.size() <= 255))
         && (!('processedAt' in data.keys()) || data.processedAt is number)
@@ -152,6 +154,16 @@ service cloud.firestore {
     }
 
     match /rechargeRequests/{requestId} {
+      allow get: if isValidId(requestId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(requestId) && isSignedIn() 
+                    && isValidRechargeRequest(incoming())
+                    && incoming().userId == request.auth.uid
+                    && incoming().status == 'pending';
+      allow update: if isAdmin() && isValidId(requestId);
+    }
+
+    match /walletRechargeRequests/{requestId} {
       allow get: if isValidId(requestId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isValidId(requestId) && isSignedIn() 

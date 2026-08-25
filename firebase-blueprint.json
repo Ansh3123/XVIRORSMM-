@@ -60,6 +60,25 @@
         "createdAt": { "type": "number" }
       },
       "required": ["userId", "amount", "type", "status", "createdAt"]
+    },
+    "RechargeRequest": {
+      "title": "RechargeRequest",
+      "description": "Wallet recharge request",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 255 },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"], "maxLength": 20 },
+        "paymentProof": { "type": "string", "maxLength": 10485760 },
+        "proofImage": { "type": "string", "maxLength": 10485760 },
+        "rejectReason": { "type": "string", "maxLength": 1000 },
+        "processedAt": { "type": "number" },
+        "processedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "amount", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -78,6 +97,14 @@
     "/transactions/{transactionId}": {
       "schema": { "$ref": "#/entities/Transaction" },
       "description": "Stores wallet transactions"
+    },
+    "/rechargeRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/RechargeRequest" },
+      "description": "Stores legacy wallet recharge requests"
+    },
+    "/walletRechargeRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/RechargeRequest" },
+      "description": "Stores active wallet recharge requests"
     }
   }
 }

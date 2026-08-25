@@ -39,49 +39,38 @@ export default function AdminDeposits() {
   const [processing, setProcessing] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Live real-time Realtime Database listener
+  // Live real-time Firestore listener for all wallet recharge requests
   useEffect(() => {
     if (userData?.role !== 'admin') return;
 
     setError(null);
-    const requestsRef = rtdbRef(rtdb, 'rechargeRequests');
-    const unsubscribe = rtdbOnValue(requestsRef, (snapshot) => {
-      const dataVal = snapshot.val();
-      const loaded: RechargeRequest[] = [];
-      
-      if (dataVal) {
-        Object.entries(dataVal).forEach(([key, val]: [string, any]) => {
-          if (val) {
-            loaded.push({
-              id: key,
-              ...val
-            } as RechargeRequest);
-          }
-        });
-      }
+    const q = query(collection(db, 'walletRechargeRequests'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loaded = snapshot.docs.map(fsDoc => {
+        const fsData = fsDoc.data();
+        return {
+          id: fsDoc.id,
+          userId: fsData.userId,
+          userEmail: fsData.userEmail,
+          amount: fsData.amount,
+          status: fsData.status,
+          createdAt: fsData.createdAt,
+          proofImage: fsData.paymentProof || fsData.proofImage, // support both fields
+          rejectReason: fsData.rejectReason,
+          processedAt: fsData.processedAt,
+          processedBy: fsData.processedBy
+        } as RechargeRequest;
+      });
       
       loaded.sort((a, b) => b.createdAt - a.createdAt);
       setRequests(loaded);
       setLoading(false);
-    }, (err: any) => {
-      console.error("RTDB Realtime Admin error: Falling back to Firestore...", err);
-      // Fallback to Firestore real-time listener
-      const q = query(collection(db, 'rechargeRequests'));
-      const unsubFirestore = onSnapshot(q, (snapshot) => {
-        const loaded = snapshot.docs.map(fsDoc => ({
-          id: fsDoc.id,
-          ...fsDoc.data()
-        } as RechargeRequest));
-        loaded.sort((a, b) => b.createdAt - a.createdAt);
-        setRequests(loaded);
-        setLoading(false);
-      }, (fsErr: any) => {
-        console.error("Firestore real-time listener error:", fsErr);
-        setError(fsErr.message || String(fsErr));
-        setLoading(false);
-        handleFirestoreError(fsErr, OperationType.LIST, 'rechargeRequests');
-      });
-      return () => unsubFirestore();
+    }, (fsErr: any) => {
+      console.error("Firestore real-time listener error in admin panel:", fsErr);
+      setError(fsErr.message || String(fsErr));
+      setLoading(false);
+      handleFirestoreError(fsErr, OperationType.LIST, 'walletRechargeRequests');
     });
 
     return () => unsubscribe();
@@ -115,13 +104,13 @@ export default function AdminDeposits() {
     const adminId = userData.uid || 'admin';
     
     try {
-      const reqRef = doc(db, 'rechargeRequests', txId);
+      const reqRef = doc(db, 'walletRechargeRequests', txId);
       const userRef = doc(db, 'users', userId);
-
+ 
       if (type === 'accept') {
         // Wait exactly 2 seconds as requested by the user
         await new Promise((resolve) => setTimeout(resolve, 2000));
-
+ 
         // Direct non-transaction updates as requested by user
         const reqDoc = await getDoc(reqRef);
         if (!reqDoc.exists()) {
@@ -142,20 +131,13 @@ export default function AdminDeposits() {
           balance: newBalance,
           updatedAt: Date.now()
         });
-
+ 
         // 2. Update recharge request status in Firestore
         await updateDoc(reqRef, {
           status: 'accepted',
           processedAt: Date.now(),
-          processedBy: adminId
-        });
-
-        // 3. Mirror status update immediately in Firebase Realtime Database
-        const rtdbRequestRef = rtdbRef(rtdb, `rechargeRequests/${txId}`);
-        await rtdbUpdate(rtdbRequestRef, {
-          status: 'accepted',
-          processedAt: Date.now(),
-          processedBy: adminId
+          processedBy: adminId,
+          updatedAt: Date.now()
         });
         
         setSuccessMessage('admin credited');
@@ -170,22 +152,14 @@ export default function AdminDeposits() {
         if (reqData.status !== 'pending') {
           throw new Error("This request has already been processed by another administrator/device.");
         }
-
+ 
         // 1. Direct update for reject in Firestore
         await updateDoc(reqRef, {
           status: 'rejected',
           rejectReason: rejectReason || "Deposit request was declined.",
           processedAt: Date.now(),
-          processedBy: adminId
-        });
-
-        // 2. Mirror status update immediately in Firebase Realtime Database
-        const rtdbRequestRef = rtdbRef(rtdb, `rechargeRequests/${txId}`);
-        await rtdbUpdate(rtdbRequestRef, {
-          status: 'rejected',
-          rejectReason: rejectReason || "Deposit request was declined.",
-          processedAt: Date.now(),
-          processedBy: adminId
+          processedBy: adminId,
+          updatedAt: Date.now()
         });
         
         setSuccessMessage('Recharge request rejected successfully');
@@ -197,7 +171,7 @@ export default function AdminDeposits() {
     } catch (err: any) {
       console.error(err);
       alert(`Error processing request: ${err.message || err}`);
-      handleFirestoreError(err, OperationType.UPDATE, `rechargeRequests/${txId}`);
+      handleFirestoreError(err, OperationType.UPDATE, `walletRechargeRequests/${txId}`);
     } finally {
       setProcessing(false);
     }

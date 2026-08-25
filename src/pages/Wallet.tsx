@@ -37,34 +37,33 @@ export default function Wallet() {
   useEffect(() => {
     if (!user) return;
     
-    // Subscribe directly to the Realtime Database for super-fast real-time synchronization!
-    const requestsRef = rtdbRef(rtdb, 'rechargeRequests');
-    const unsubscribe = rtdbOnValue(requestsRef, (snapshot) => {
-      const dataVal = snapshot.val();
+    // Firestore is our single source of truth. Use an onSnapshot listener for instant cross-device synchronization.
+    const q = query(
+      collection(db, 'walletRechargeRequests'), 
+      where('userId', '==', user.uid)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedTransactions: Transaction[] = [];
-      
-      if (dataVal) {
-        Object.entries(dataVal).forEach(([key, val]: [string, any]) => {
-          if (val && val.userId === user.uid) {
-            loadedTransactions.push({
-              id: key,
-              amount: val.amount,
-              type: 'deposit',
-              status: val.status,
-              createdAt: val.createdAt,
-              rejectReason: val.rejectReason
-            });
-          }
+      snapshot.forEach((fsDoc) => {
+        const fsData = fsDoc.data();
+        loadedTransactions.push({
+          id: fsDoc.id,
+          amount: fsData.amount,
+          type: 'deposit',
+          status: fsData.status,
+          createdAt: fsData.createdAt,
+          rejectReason: fsData.rejectReason
         });
-      }
+      });
       
       loadedTransactions.sort((a, b) => b.createdAt - a.createdAt);
       
-      // Check if any transaction transitioned from 'pending' to 'completed' / 'accepted' (Approved)
+      // Check if any transaction transitioned from 'pending' to 'accepted' / 'completed'
       if (prevTransactionsRef.current.length > 0) {
         const approvedTx = loadedTransactions.find(newTx => {
           const oldTx = prevTransactionsRef.current.find(t => t.id === newTx.id);
-          return oldTx && oldTx.status === 'pending' && (newTx.status === 'completed' || newTx.status === 'accepted');
+          return oldTx && oldTx.status === 'pending' && (newTx.status === 'accepted' || newTx.status === 'completed');
         });
         if (approvedTx) {
           setShowFundsAddedPopup(true);
@@ -74,33 +73,12 @@ export default function Wallet() {
       prevTransactionsRef.current = loadedTransactions;
       setTransactions(loadedTransactions);
       setLoading(false);
-    }, (err) => {
-      console.error("RTDB Error: Falling back to Firestore...", err);
-      // Fallback to Firestore subscription if Realtime Database is completely fresh/unsupported
-      const q = query(collection(db, 'rechargeRequests'), where('userId', '==', user.uid));
-      const unsubFirestore = onSnapshot(q, (fsSnapshot) => {
-        const fsLoaded = fsSnapshot.docs.map(fsDoc => {
-          const fsData = fsDoc.data();
-          return {
-            id: fsDoc.id,
-            amount: fsData.amount,
-            type: 'deposit',
-            status: fsData.status,
-            createdAt: fsData.createdAt,
-            rejectReason: fsData.rejectReason
-          } as Transaction;
-        });
-        fsLoaded.sort((a, b) => b.createdAt - a.createdAt);
-        setTransactions(fsLoaded);
-        setLoading(false);
-      }, (fsErr) => {
-        console.error(fsErr);
-        setLoading(false);
-        handleFirestoreError(fsErr, OperationType.LIST, 'rechargeRequests');
-      });
-      return () => unsubFirestore();
+    }, (error) => {
+      console.error("Firestore Error listening to walletRechargeRequests:", error);
+      setLoading(false);
+      handleFirestoreError(error, OperationType.LIST, 'walletRechargeRequests');
     });
- 
+
     return () => unsubscribe();
   }, [user]);
 
@@ -159,25 +137,16 @@ export default function Wallet() {
     setSubmitting(true);
     const amountToSave = depositAmount;
     try {
-      // 1. Save to Cloud Firestore
-      const fsDocRef = await addDoc(collection(db, 'rechargeRequests'), {
+      // Save directly to Cloud Firestore as the single source of truth
+      await addDoc(collection(db, 'walletRechargeRequests'), {
         userId: user.uid,
         userEmail: user.email || userData?.email || '',
         amount: parseFloat(amountToSave),
         status: 'pending',
-        proofImage: proofImage,
-        createdAt: Date.now()
-      });
-
-      // 2. Mirror immediately to Firebase Realtime Database using the EXACT same ID!
-      const rtdbRefPath = rtdbRef(rtdb, `rechargeRequests/${fsDocRef.id}`);
-      await rtdbSet(rtdbRefPath, {
-        userId: user.uid,
-        userEmail: user.email || userData?.email || '',
-        amount: parseFloat(amountToSave),
-        status: 'pending',
-        proofImage: proofImage,
-        createdAt: Date.now()
+        paymentProof: proofImage,
+        proofImage: proofImage, // support both fields for compatibility
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       });
 
       setSubmittedAmount(amountToSave);
@@ -187,9 +156,9 @@ export default function Wallet() {
       setStep(1);
       setShowReviewPopup(true);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to submit recharge request:", err);
       alert("Failed to submit request.");
-      handleFirestoreError(err, OperationType.CREATE, 'rechargeRequests');
+      handleFirestoreError(err, OperationType.CREATE, 'walletRechargeRequests');
     } finally {
       setSubmitting(false);
     }
