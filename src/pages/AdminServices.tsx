@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Service, fetchSMMServices } from '../lib/smm';
 
 export default function AdminServices() {
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -62,6 +62,14 @@ export default function AdminServices() {
   useEffect(() => {
     fetchServices();
   }, [userData]);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   if (userData?.role !== 'admin') {
     return (

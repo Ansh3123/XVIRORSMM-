@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, ShoppingCart, List, Wallet, Activity, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldAlert, Users, ShoppingCart, List, Wallet, Activity, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 function EndpointStatus() {
@@ -102,7 +102,15 @@ function EndpointStatus() {
 }
 
 export default function AdminDashboard() {
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   if (userData?.role !== 'admin') {
     return (
