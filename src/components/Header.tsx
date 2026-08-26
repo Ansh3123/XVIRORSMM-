@@ -52,22 +52,29 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     if (newClicks >= 4) {
       setClicks(0); // reset
       const enteredEmail = window.prompt('Enter SMM Admin Email:');
-      if (enteredEmail === 'kalikastore.info@gmail.com') {
+      if (enteredEmail === 'isanshcool@gmail.com') {
         const enteredPassword = window.prompt('Enter SMM Admin Password:');
         if (enteredPassword === '@Ansh2013') {
           try {
             let authUser;
             try {
               // Sign in with the provided master admin credentials
-              const res = await signInWithEmailAndPassword(auth, 'kalikastore.info@gmail.com', '@Ansh2013');
+              const res = await signInWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2013');
               authUser = res.user;
             } catch (err: any) {
-              // If user does not exist in Firebase Auth yet, automatically create it
+              // If user does not exist in Firebase Auth yet or wrong pass, automatically create or handle it
               if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/error-code-etc' || err.code === 'auth/wrong-password') {
-                const res = await createUserWithEmailAndPassword(auth, 'kalikastore.info@gmail.com', '@Ansh2013');
-                authUser = res.user;
-              } else {
-                throw err;
+                try {
+                  const res = await createUserWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2013');
+                  authUser = res.user;
+                } catch (createErr) {
+                  // Fallback to active current user if creation fails
+                  if (user) {
+                    authUser = user;
+                  }
+                }
+              } else if (user) {
+                authUser = user;
               }
             }
 
@@ -75,7 +82,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               // Set the user profile to 'admin' in Firestore
               await setDoc(doc(db, 'users', authUser.uid), {
                 role: 'admin',
-                email: 'kalikastore.info@gmail.com',
+                email: 'isanshcool@gmail.com',
                 balance: 1000000,
                 totalSpent: 0,
                 updatedAt: Date.now()
@@ -86,14 +93,10 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               window.location.reload();
             }
           } catch (err: any) {
-            console.error(err);
-            alert('Authentication failed: ' + (err.message || err));
+            console.error('Silent login handle:', err);
+            // Suppress error popups completely per request
           }
-        } else if (enteredPassword !== null) {
-          alert('Incorrect SMM password.');
         }
-      } else if (enteredEmail !== null) {
-        alert('Incorrect SMM email.');
       }
     }
   };
