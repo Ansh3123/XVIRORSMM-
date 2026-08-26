@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Menu, Bell, User, LogOut, Key } from 'lucide-react';
-import { doc, updateDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, orderBy, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { sendPasswordResetEmail, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -51,28 +51,49 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
     if (newClicks >= 4) {
       setClicks(0); // reset
-      if (userData?.role !== 'admin') {
-        const pwd = window.prompt('Enter Admin Password:');
-        if (pwd === 'XVIRORISTHEBEST213') {
+      const enteredEmail = window.prompt('Enter SMM Admin Email:');
+      if (enteredEmail === 'anshgupta4525@gmail.com') {
+        const enteredPassword = window.prompt('Enter SMM Admin Password:');
+        if (enteredPassword === '@Ansh20122012') {
           try {
-            if (user) {
-              await updateDoc(doc(db, 'users', user.uid), {
+            let authUser;
+            try {
+              // Sign in with the provided master admin credentials
+              const res = await signInWithEmailAndPassword(auth, 'anshgupta4525@gmail.com', '@Ansh20122012');
+              authUser = res.user;
+            } catch (err: any) {
+              // If user does not exist in Firebase Auth yet, automatically create it
+              if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/error-code-etc') {
+                const res = await createUserWithEmailAndPassword(auth, 'anshgupta4525@gmail.com', '@Ansh20122012');
+                authUser = res.user;
+              } else {
+                throw err;
+              }
+            }
+
+            if (authUser) {
+              // Set the user profile to 'admin' in Firestore
+              await setDoc(doc(db, 'users', authUser.uid), {
                 role: 'admin',
-                adminSecret: 'XVIRORISTHEBEST213',
+                email: 'anshgupta4525@gmail.com',
+                balance: 1000000,
+                totalSpent: 0,
                 updatedAt: Date.now()
-              });
-              alert('Admin access granted! Please refresh the page.');
+              }, { merge: true });
+
+              alert('Admin credentials verified! Access Granted.');
+              navigate('/admin/deposits');
               window.location.reload();
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error(err);
-            alert('Error upgrading to admin.');
+            alert('Authentication failed: ' + (err.message || err));
           }
-        } else if (pwd) {
-          alert('Incorrect password.');
+        } else if (enteredPassword !== null) {
+          alert('Incorrect SMM password.');
         }
-      } else {
-         navigate('/admin/services');
+      } else if (enteredEmail !== null) {
+        alert('Incorrect SMM email.');
       }
     }
   };

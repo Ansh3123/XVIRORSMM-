@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, rtdb } from '../lib/firebase';
 import { ref as rtdbRef, update as rtdbUpdate, onValue as rtdbOnValue } from 'firebase/database';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { Loader2, Check, X, ImageIcon, XCircle, AlertCircle } from 'lucide-react';
 
 interface RechargeRequest {
@@ -39,6 +40,10 @@ export default function AdminDeposits() {
   const [processing, setProcessing] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  const { showToast } = useToast();
+  const isInitialMount = useRef(true);
+  const notifiedRequestIdsRef = useRef<Set<string>>(new Set());
+
   // Live real-time Firestore listener for all wallet recharge requests
   useEffect(() => {
     if (userData?.role !== 'admin') return;
@@ -63,6 +68,34 @@ export default function AdminDeposits() {
         } as RechargeRequest;
       });
       
+      // Real-time toast notification system for new pending requests
+      if (isInitialMount.current) {
+        // Register all currently existing request IDs so they do not trigger toasts on load
+        snapshot.docs.forEach((doc) => {
+          notifiedRequestIdsRef.current.add(doc.id);
+        });
+        isInitialMount.current = false;
+      } else {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            const docId = change.doc.id;
+            
+            if (!notifiedRequestIdsRef.current.has(docId)) {
+              notifiedRequestIdsRef.current.add(docId);
+              if (data && data.status === 'pending') {
+                showToast(
+                  'info',
+                  'New Deposit Request Received',
+                  `User ${data.userEmail || 'unknown'} has submitted a new deposit request of $${data.amount || 0}.`,
+                  12000
+                );
+              }
+            }
+          }
+        });
+      }
+
       loaded.sort((a, b) => b.createdAt - a.createdAt);
       setRequests(loaded);
       setLoading(false);
@@ -73,8 +106,12 @@ export default function AdminDeposits() {
       handleFirestoreError(fsErr, OperationType.LIST, 'walletRechargeRequests');
     });
 
-    return () => unsubscribe();
-  }, [userData]);
+    return () => {
+      unsubscribe();
+      // Reset mount state when component unmounts
+      isInitialMount.current = true;
+    };
+  }, [userData, showToast]);
 
   const handleConfirmAcceptStep1 = (txId: string, userId: string, amount: number) => {
     setConfirmState({

@@ -1,6 +1,7 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Loader2 } from 'lucide-react';
 import SplashScreen from './components/SplashScreen';
@@ -33,10 +34,11 @@ export default function App() {
   return (
     <>
       <AuthProvider>
-        <FirebaseSyncIndicator />
-        <Router>
-        <Suspense fallback={<FullPageLoader />}>
-          <Routes>
+        <ToastProvider>
+          <FirebaseSyncIndicator />
+          <Router>
+          <Suspense fallback={<FullPageLoader />}>
+            <Routes>
             <Route path="/login" element={<Login />} />
             
             <Route element={<DashboardLayout />}>
@@ -100,7 +102,8 @@ export default function App() {
           </Routes>
         </Suspense>
       </Router>
-    </AuthProvider>
+    </ToastProvider>
+  </AuthProvider>
     </>
   );
 }
