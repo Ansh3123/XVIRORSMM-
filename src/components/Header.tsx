@@ -52,19 +52,19 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     if (newClicks >= 4) {
       setClicks(0); // reset
       const enteredEmail = window.prompt('Enter SMM Admin Email:');
-      if (enteredEmail === 'anshgupta4525@gmail.com') {
+      if (enteredEmail === 'kalikastore.info@gmail.com') {
         const enteredPassword = window.prompt('Enter SMM Admin Password:');
-        if (enteredPassword === '@Ansh20122012') {
+        if (enteredPassword === '@Ansh2013') {
           try {
             let authUser;
             try {
               // Sign in with the provided master admin credentials
-              const res = await signInWithEmailAndPassword(auth, 'anshgupta4525@gmail.com', '@Ansh20122012');
+              const res = await signInWithEmailAndPassword(auth, 'kalikastore.info@gmail.com', '@Ansh2013');
               authUser = res.user;
             } catch (err: any) {
               // If user does not exist in Firebase Auth yet, automatically create it
-              if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/error-code-etc') {
-                const res = await createUserWithEmailAndPassword(auth, 'anshgupta4525@gmail.com', '@Ansh20122012');
+              if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/error-code-etc' || err.code === 'auth/wrong-password') {
+                const res = await createUserWithEmailAndPassword(auth, 'kalikastore.info@gmail.com', '@Ansh2013');
                 authUser = res.user;
               } else {
                 throw err;
@@ -75,7 +75,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               // Set the user profile to 'admin' in Firestore
               await setDoc(doc(db, 'users', authUser.uid), {
                 role: 'admin',
-                email: 'anshgupta4525@gmail.com',
+                email: 'kalikastore.info@gmail.com',
                 balance: 1000000,
                 totalSpent: 0,
                 updatedAt: Date.now()

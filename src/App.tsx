@@ -7,15 +7,16 @@ import { Loader2 } from 'lucide-react';
 import SplashScreen from './components/SplashScreen';
 import FirebaseSyncIndicator from './components/FirebaseSyncIndicator';
 
-// Lazy loaded pages
-const DashboardHome = React.lazy(() => import('./pages/DashboardHome'));
-const Login = React.lazy(() => import('./pages/Login'));
-const Services = React.lazy(() => import('./pages/Services'));
-const NewOrder = React.lazy(() => import('./pages/NewOrder'));
-const Wallet = React.lazy(() => import('./pages/Wallet'));
-const Orders = React.lazy(() => import('./pages/Orders'));
-const Tickets = React.lazy(() => import('./pages/Tickets'));
+// Pre-import core customer pages to render instantly under 3 seconds
+import DashboardHome from './pages/DashboardHome';
+import Login from './pages/Login';
+import Services from './pages/Services';
+import NewOrder from './pages/NewOrder';
+import Wallet from './pages/Wallet';
+import Orders from './pages/Orders';
+import Tickets from './pages/Tickets';
 
+// Keep admin dashboards lazy loaded for modular code splitting
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 const AdminServices = React.lazy(() => import('./pages/AdminServices'));
 const AdminDeposits = React.lazy(() => import('./pages/AdminDeposits'));
@@ -23,11 +24,22 @@ const AdminOrders = React.lazy(() => import('./pages/AdminOrders'));
 const AdminUsers = React.lazy(() => import('./pages/AdminUsers'));
 
 function PageLoader() {
-  return null;
+  return (
+    <div className="flex items-center justify-center py-12">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+    </div>
+  );
 }
 
 function FullPageLoader() {
-  return null;
+  return (
+    <div className="fixed inset-0 bg-white flex items-center justify-center z-[9999]">
+      <div className="flex flex-col items-center space-y-4">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+        <p className="text-sm font-semibold tracking-tight text-gray-500">Syncing database...</p>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
