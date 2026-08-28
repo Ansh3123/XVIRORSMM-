@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDoc, updateDoc, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, rtdb } from '../lib/firebase';
 import { ref as rtdbRef, update as rtdbUpdate, onValue as rtdbOnValue } from 'firebase/database';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { Loader2, Check, X, ImageIcon, XCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Check, X, ImageIcon, XCircle, AlertCircle, Search, RefreshCw, UserCheck } from 'lucide-react';
 
 interface RechargeRequest {
   id: string;
@@ -17,6 +17,7 @@ interface RechargeRequest {
   rejectReason?: string;
   processedAt?: number;
   processedBy?: string;
+  utr?: string;
 }
 
 export default function AdminDeposits() {
@@ -27,6 +28,12 @@ export default function AdminDeposits() {
   const [viewProof, setViewProof] = useState<string | null>(null);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+
+  // UTR Search & Verification Console State
+  const [searchUtr, setSearchUtr] = useState('');
+  const [searched, setSearched] = useState(false);
+  const [matchedRequest, setMatchedRequest] = useState<RechargeRequest | null>(null);
+  const [searchFeedback, setSearchFeedback] = useState<{ type: 'error' | 'success' | 'already_used'; message: string } | null>(null);
 
   // Confirmation flow state
   const [confirmState, setConfirmState] = useState<{
@@ -64,7 +71,8 @@ export default function AdminDeposits() {
           proofImage: fsData.paymentProof || fsData.proofImage, // support both fields
           rejectReason: fsData.rejectReason,
           processedAt: fsData.processedAt,
-          processedBy: fsData.processedBy
+          processedBy: fsData.processedBy,
+          utr: fsData.utr || ''
         } as RechargeRequest;
       });
       
@@ -112,6 +120,58 @@ export default function AdminDeposits() {
       isInitialMount.current = true;
     };
   }, [userData, showToast]);
+
+  // Reactively update search results when the requests collection changes in real-time
+  useEffect(() => {
+    if (!searched || !searchUtr) return;
+    
+    const cleanSearch = searchUtr.trim().toUpperCase();
+    const exactMatch = requests.find(req => req.utr && req.utr.trim().toUpperCase() === cleanSearch);
+    
+    if (exactMatch) {
+      if (exactMatch.status === 'accepted') {
+        setMatchedRequest(null);
+        setSearchFeedback({
+          type: 'already_used',
+          message: `This UTR (${cleanSearch}) has already been used and verified for user ${exactMatch.userEmail || 'unknown'}. Amount: ₹${exactMatch.amount.toFixed(2)}.`
+        });
+      } else if (exactMatch.status === 'rejected') {
+        setMatchedRequest(null);
+        setSearchFeedback({
+          type: 'error',
+          message: `This UTR (${cleanSearch}) was rejected previously for user ${exactMatch.userEmail || 'unknown'}.`
+        });
+      } else {
+        setMatchedRequest(exactMatch);
+        setSearchFeedback({
+          type: 'success',
+          message: `Exact match found! Pending payment request of ₹${exactMatch.amount.toFixed(2)} by user ${exactMatch.userEmail || 'unknown'}.`
+        });
+      }
+    } else {
+      setMatchedRequest(null);
+      setSearchFeedback({
+        type: 'error',
+        message: 'UTR not found/mismatch. No pending transaction exists with this UTR reference.'
+      });
+    }
+  }, [requests, searched, searchUtr]);
+
+  const handleVerifyUtr = () => {
+    const cleanSearch = searchUtr.trim().toUpperCase();
+    if (!cleanSearch) {
+      alert("Please enter a UTR number to search.");
+      return;
+    }
+    setSearched(true);
+  };
+
+  const handleClearSearch = () => {
+    setSearchUtr('');
+    setSearched(false);
+    setMatchedRequest(null);
+    setSearchFeedback(null);
+  };
 
   const handleConfirmAcceptStep1 = (txId: string, userId: string, amount: number) => {
     setConfirmState({
@@ -176,6 +236,24 @@ export default function AdminDeposits() {
           processedBy: adminId,
           updatedAt: Date.now()
         });
+
+        // 3. Create a transaction record to keep a complete transaction history
+        await addDoc(collection(db, 'transactions'), {
+          userId,
+          userEmail: reqData.userEmail || '',
+          amount,
+          type: 'deposit',
+          status: 'completed',
+          utr: reqData.utr || '',
+          createdAt: reqData.createdAt,
+          verifiedAt: Date.now(),
+          verificationTime: Date.now()
+        });
+        
+        // Clear matched request if it was the one processed
+        if (matchedRequest && txId === matchedRequest.id) {
+          handleClearSearch();
+        }
         
         setSuccessMessage('admin credited');
         setShowSuccessPopup(true);
@@ -233,6 +311,126 @@ export default function AdminDeposits() {
         <p className="text-gray-500 text-sm mt-1">Manage user deposit requests and review payment proofs in real-time.</p>
       </div>
 
+      {/* UTR Verification Console Panel */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+            <Search className="w-5 h-5 text-blue-600" />
+            <span>UTR Manual Verification Console</span>
+          </h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Compare and search customer-submitted UTRs to safely match and verify payments with a single-use lock protection.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all font-mono"
+              placeholder="Enter customer UTR (e.g. 12-digit Ref No.)"
+              value={searchUtr}
+              onChange={(e) => setSearchUtr(e.target.value.trim().toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && handleVerifyUtr()}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleVerifyUtr}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-xs transition-colors flex items-center justify-center gap-2"
+            >
+              Verify UTR
+            </button>
+            {searched && (
+              <button
+                onClick={handleClearSearch}
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {searched && searchFeedback && (
+          <div className="mt-4 animate-fade-in">
+            {searchFeedback.type === 'success' && matchedRequest ? (
+              <div className="p-5 bg-green-50/50 border border-green-200 rounded-lg space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-green-100 text-green-700 rounded-full shrink-0">
+                    <UserCheck className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-green-800">UTR Match Found!</h3>
+                    <p className="text-xs text-green-700 mt-0.5">
+                      This UTR exactly matches a pending payment request. Please confirm details below to credit the user.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-green-200 text-sm">
+                  <div className="space-y-1.5 text-gray-700">
+                    <p><span className="font-semibold text-gray-900">User Email:</span> {matchedRequest.userEmail || 'unknown'}</p>
+                    <p><span className="font-semibold text-gray-900">User ID:</span> <span className="font-mono text-xs">{matchedRequest.userId}</span></p>
+                    <p><span className="font-semibold text-gray-900">Submitted UTR:</span> <span className="font-mono bg-green-100 px-1.5 py-0.5 rounded text-green-900 font-bold">{matchedRequest.utr}</span></p>
+                    <p><span className="font-semibold text-gray-900">Requested Amount:</span> <span className="font-bold text-green-700">₹{matchedRequest.amount.toFixed(2)}</span></p>
+                    <p><span className="font-semibold text-gray-900">Date Submitted:</span> {new Date(matchedRequest.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="flex flex-col justify-between items-start md:items-end gap-3">
+                    {matchedRequest.proofImage ? (
+                      <button
+                        onClick={() => setViewProof(matchedRequest.proofImage!)}
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-xs text-xs font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-all"
+                      >
+                        <ImageIcon className="w-4 h-4 mr-2 text-blue-500" /> View Payment Proof Receipt
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">No payment proof receipt image attached.</span>
+                    )}
+
+                    <div className="flex gap-2 w-full md:w-auto">
+                      <button
+                        onClick={() => handleConfirmRejectStep1(matchedRequest.id, matchedRequest.userId, matchedRequest.amount)}
+                        className="flex-1 md:flex-none px-4 py-2 border border-red-300 text-red-700 hover:bg-red-50 text-xs font-bold rounded-lg transition-colors"
+                      >
+                        Decline
+                      </button>
+                      <button
+                        onClick={() => handleConfirmAcceptStep1(matchedRequest.id, matchedRequest.userId, matchedRequest.amount)}
+                        className="flex-1 md:flex-none px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4" /> Verify & Credit Wallet
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : searchFeedback.type === 'already_used' ? (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5 animate-bounce" />
+                <div>
+                  <h3 className="text-sm font-bold text-yellow-800">UTR Already Verified / Used</h3>
+                  <p className="text-xs text-yellow-700 mt-1">{searchFeedback.message}</p>
+                  <p className="text-xs text-yellow-600 mt-2 font-semibold font-mono bg-yellow-100/50 px-2.5 py-1.5 rounded border border-yellow-200">🛡️ Transactional Lock Active: A UTR can only be used and credited exactly once.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-bold text-red-800">Verification Rejected</h3>
+                  <p className="text-xs text-red-700 mt-1">{searchFeedback.message}</p>
+                  <p className="text-xs text-red-600 mt-2 font-semibold">Double-check the reference number or verify if the client has submitted the correct code.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
@@ -259,6 +457,11 @@ export default function AdminDeposits() {
                   </p>
                   <p className="text-xs text-gray-500 font-mono mt-0.5">ID: {tx.userId}</p>
                   <p className="text-sm text-gray-500 mt-1">Amount: <span className="font-bold text-green-600">₹{tx.amount.toFixed(2)}</span></p>
+                  {tx.utr && (
+                    <p className="text-xs text-gray-600 mt-1 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded font-mono inline-block select-all">
+                      UTR: <span className="font-bold text-gray-800">{tx.utr}</span>
+                    </p>
+                  )}
                   <p className="text-xs text-gray-400 mt-1">{new Date(tx.createdAt).toLocaleString()}</p>
                   
                   {tx.status === 'rejected' && tx.rejectReason && (

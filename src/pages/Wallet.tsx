@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, addDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db, handleFirestoreError, OperationType, rtdb } from '../lib/firebase';
 import { ref as rtdbRef, set as rtdbSet, onValue as rtdbOnValue } from 'firebase/database';
@@ -14,6 +14,7 @@ interface Transaction {
   status: string;
   createdAt: number;
   rejectReason?: string;
+  utr?: string;
 }
 
 export default function Wallet() {
@@ -26,6 +27,7 @@ export default function Wallet() {
   const [step, setStep] = useState(1);
   const [depositAmount, setDepositAmount] = useState('');
   const [proofImage, setProofImage] = useState<string | null>(null);
+  const [utr, setUtr] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedAmount, setSubmittedAmount] = useState('');
@@ -53,7 +55,8 @@ export default function Wallet() {
           type: 'deposit',
           status: fsData.status,
           createdAt: fsData.createdAt,
-          rejectReason: fsData.rejectReason
+          rejectReason: fsData.rejectReason,
+          utr: fsData.utr || ''
         });
       });
       
@@ -133,16 +136,35 @@ export default function Wallet() {
   const handleDeposit = async (e: React.FormEvent) => {
     if (!user || !depositAmount || !proofImage) return;
     e.preventDefault();
-    
+
+    const cleanUtr = utr.trim().toUpperCase();
+    if (!cleanUtr) {
+      alert("Please enter the UTR / Transaction Reference Number.");
+      return;
+    }
+
     setSubmitting(true);
     const amountToSave = depositAmount;
     try {
+      // Check if this UTR has already been submitted in walletRechargeRequests
+      const utrQuery = query(
+        collection(db, 'walletRechargeRequests'),
+        where('utr', '==', cleanUtr)
+      );
+      const utrSnapshot = await getDocs(utrQuery);
+      if (!utrSnapshot.empty) {
+        alert("This UTR / Transaction Reference has already been submitted or verified. If this is a mistake, please contact support.");
+        setSubmitting(false);
+        return;
+      }
+
       // Save directly to Cloud Firestore as the single source of truth
       await addDoc(collection(db, 'walletRechargeRequests'), {
         userId: user.uid,
         userEmail: user.email || userData?.email || '',
         amount: parseFloat(amountToSave),
         status: 'pending',
+        utr: cleanUtr,
         paymentProof: proofImage,
         proofImage: proofImage, // support both fields for compatibility
         createdAt: Date.now(),
@@ -153,6 +175,7 @@ export default function Wallet() {
       setShowSuccess(true);
       setDepositAmount('');
       setProofImage(null);
+      setUtr('');
       setStep(1);
       setShowReviewPopup(true);
     } catch (err) {
@@ -331,7 +354,22 @@ export default function Wallet() {
 
                <div>
                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                   Payment Proof Screenshot <span className="text-red-500">*</span>
+                   UTR / UPI Transaction ID / Ref No. <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="utr"
+                    id="utr"
+                    required
+                    value={utr}
+                    onChange={(e) => setUtr(e.target.value)}
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md py-3 border px-3 mb-4"
+                    placeholder="Enter 12-digit UPI UTR / Ref No."
+                  />
+                  <p className="text-2xs text-gray-400 mt-1 mb-4">Please enter the exact UPI transaction reference or UTR number of your payment.</p>
+                  
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Proof Screenshot <span className="text-red-500">*</span>
                  </label>
                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative hover:border-blue-400 transition-colors">
                    <div className="space-y-1 text-center">
@@ -384,6 +422,11 @@ export default function Wallet() {
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-900 capitalize">{tx.type}</p>
                       <p className="text-sm text-gray-500">{format(tx.createdAt, 'MMM d, yyyy HH:mm')}</p>
+                      {tx.utr && (
+                        <p className="text-xs text-gray-400 mt-1 select-all font-mono">
+                          UTR: <span className="font-semibold text-gray-600">{tx.utr}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="text-left sm:text-right">

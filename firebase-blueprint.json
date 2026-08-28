@@ -70,6 +70,7 @@
         "userEmail": { "type": "string", "maxLength": 255 },
         "amount": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "accepted", "rejected"], "maxLength": 20 },
+        "utr": { "type": "string", "maxLength": 50 },
         "paymentProof": { "type": "string", "maxLength": 10485760 },
         "proofImage": { "type": "string", "maxLength": 10485760 },
         "rejectReason": { "type": "string", "maxLength": 1000 },
