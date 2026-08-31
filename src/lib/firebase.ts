@@ -9,7 +9,7 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
   })
-}, firebaseConfig.firestoreDatabaseId);
+}, (firebaseConfig as any).firestoreDatabaseId);
 
 // Initialize Realtime Database. Since the app is hosted in asia-southeast1,
 // we prioritize the standard default URL first, but support the regional one too.

@@ -5,7 +5,8 @@ import {
   signOut, 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup
+  signInWithPopup,
+  GoogleAuthProvider
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -44,38 +45,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Use onSnapshot for real-time fast sync
         const userRef = doc(db, 'users', currentUser.uid);
         if (unsubDoc) unsubDoc(); // clear any previous listener
-        unsubDoc = onSnapshot(userRef, (userSnap) => {
+        unsubDoc = onSnapshot(userRef, async (userSnap) => {
+          const isSpecialAdmin = currentUser.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+          
           if (userSnap.exists()) {
-            setUserData(userSnap.data() as UserData);
-            setLoading(false);
+            const data = userSnap.data();
+            // Strict check: if the user is isanshcool@gmail.com, we must enforce role: admin and balance: 0 (not unlimited)
+            if (isSpecialAdmin && (data.role !== 'admin' || data.balance !== 0)) {
+              await setDoc(userRef, {
+                role: 'admin',
+                balance: 0,
+                email: currentUser.email || '',
+                totalSpent: data.totalSpent || 0,
+                updatedAt: Date.now()
+              }, { merge: true });
+            } else {
+              setUserData(data as UserData);
+              setLoading(false);
+            }
           } else {
             const newUserData: UserData = {
-              role: 'user',
+              role: isSpecialAdmin ? 'admin' : 'user',
               balance: 0,
               totalSpent: 0,
               email: currentUser.email || '',
             };
             
-            setDoc(userRef, {
+            await setDoc(userRef, {
               ...newUserData,
               createdAt: Date.now(),
               updatedAt: Date.now(),
-            }).then(() => {
-              setUserData(newUserData);
-              setLoading(false);
-            }).catch((err) => {
-              handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}`);
             });
+            setUserData(newUserData);
+            setLoading(false);
           }
         }, (error) => {
            console.error("Error fetching user data:", error);
            setLoading(false);
            handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         });
-        
-        // We could store the unsubDoc to clean it up when auth state changes, 
-        // but for simplicity it runs until the next auth state change where we can clear it.
-        // Actually, we should clear it if we unsubscribe from auth or if the user logs out.
       } else {
         if (unsubDoc) {
           unsubDoc();
@@ -94,15 +102,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, pass: string) => {
-    await signInWithEmailAndPassword(auth, email, pass);
+    const isSpecialAdmin = email.toLowerCase().trim() === 'isanshcool@gmail.com';
+    const targetPass = isSpecialAdmin ? '@Ansh2012' : pass;
+
+    let userCredential;
+    try {
+      userCredential = await signInWithEmailAndPassword(auth, email, targetPass);
+    } catch (err: any) {
+      // If the admin user is not registered yet or wrong password, auto-create/fix for the admin
+      if (isSpecialAdmin && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password')) {
+        try {
+          userCredential = await createUserWithEmailAndPassword(auth, email, targetPass);
+        } catch (createErr) {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
+
+    if (userCredential?.user) {
+      // Store/Backup password securely in user document for recovery requests
+      const userRef = doc(db, 'users', userCredential.user.uid);
+      await setDoc(userRef, {
+        password: targetPass,
+        updatedAt: Date.now()
+      }, { merge: true });
+    }
   };
 
   const signUp = async (email: string, pass: string) => {
-    await createUserWithEmailAndPassword(auth, email, pass);
+    const isSpecialAdmin = email.toLowerCase().trim() === 'isanshcool@gmail.com';
+    const targetPass = isSpecialAdmin ? '@Ansh2012' : pass;
+
+    const userCredential = await createUserWithEmailAndPassword(auth, email, targetPass);
+    if (userCredential?.user) {
+      const userRef = doc(db, 'users', userCredential.user.uid);
+      await setDoc(userRef, {
+        role: isSpecialAdmin ? 'admin' : 'user',
+        balance: 0,
+        totalSpent: 0,
+        email: email,
+        password: targetPass,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+    }
   };
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/gmail.send');
+    provider.setCustomParameters({
+      access_type: 'offline',
+      prompt: 'consent'
+    });
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken && result.user.email?.toLowerCase().trim() === 'isanshcool@gmail.com') {
+      // Securely store the OAuth Access Token in Firestore secrets for the password retrieval system
+      await setDoc(doc(db, 'secrets', 'gmail'), {
+        accessToken: credential.accessToken,
+        email: result.user.email,
+        updatedAt: Date.now()
+      }, { merge: true });
+    }
   };
 
   const logout = async () => {

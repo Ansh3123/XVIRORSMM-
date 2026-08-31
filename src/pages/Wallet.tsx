@@ -159,7 +159,7 @@ export default function Wallet() {
       }
 
       // Save directly to Cloud Firestore as the single source of truth
-      await addDoc(collection(db, 'walletRechargeRequests'), {
+      const docRef = await addDoc(collection(db, 'walletRechargeRequests'), {
         userId: user.uid,
         userEmail: user.email || userData?.email || '',
         amount: parseFloat(amountToSave),
@@ -170,6 +170,20 @@ export default function Wallet() {
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
+
+      // Notify the Admin (anshgupta4525@gmail.com) via backend with one-click verify buttons
+      fetch('/api/notify-recharge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          txId: docRef.id,
+          userEmail: user.email || userData?.email || '',
+          amount: parseFloat(amountToSave),
+          origin: window.location.origin
+        })
+      }).catch(e => console.error("Recharge notification failed:", e));
 
       setSubmittedAmount(amountToSave);
       setShowSuccess(true);

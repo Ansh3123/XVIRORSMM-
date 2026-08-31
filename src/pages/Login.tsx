@@ -7,9 +7,13 @@ export default function Login() {
   const { user, userData, signIn, signUp, signInWithGoogle, loading } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   if (user && !loading) {
     if (userData?.role === 'admin') {
@@ -18,10 +22,43 @@ export default function Login() {
     return <Navigate to="/" replace />;
   }
 
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    setError('');
+    setSuccessMessage('');
+    setResetLoading(true);
+    try {
+      const res = await fetch('/api/send-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResetSent(true);
+        setSuccessMessage(data.message || 'Password sent successfully to your email address!');
+      } else {
+        setError(data.message || 'Failed to send recovery email. Please try again.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to reach server. Please check your connection.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSigningIn) return;
     setError('');
+    setSuccessMessage('');
     setIsSigningIn(true);
     try {
       if (isRegistering) {
@@ -94,57 +131,127 @@ export default function Login() {
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4 rounded-md shadow-sm">
-            <div>
-              <input
-                type="email"
-                required
-                className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
-                placeholder="Email address"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <input
-                type="password"
-                required
-                className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
-                placeholder="Password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-              />
-            </div>
+        {successMessage && (
+          <div className="bg-green-50 text-green-600 p-3 rounded text-sm text-center font-medium">
+            {successMessage}
           </div>
+        )}
 
-          <div>
-            <button
-              type="submit"
-              disabled={isSigningIn}
-              className="group relative flex w-full justify-center rounded-md border border-transparent bg-gray-900 py-2 px-4 text-sm font-medium text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50"
-            >
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-                {isSigningIn ? (
-                  <Loader2 className="h-5 w-5 text-gray-400 animate-spin" aria-hidden="true" />
-                ) : (
-                  <LogIn className="h-5 w-5 text-gray-400 group-hover:text-gray-300" aria-hidden="true" />
-                )}
-              </span>
-              {isSigningIn ? 'Processing...' : (isRegistering ? 'Sign up' : 'Sign in')}
-            </button>
-          </div>
-          
-          <div className="text-center">
-            <button 
-              type="button" 
-              onClick={() => setIsRegistering(!isRegistering)}
-              className="text-sm text-blue-600 hover:text-blue-500"
-            >
-              {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
-          </div>
-        </form>
+        {isResetMode ? (
+          <form className="mt-8 space-y-6" onSubmit={handleResetSubmit}>
+            <div className="space-y-4 rounded-md shadow-sm">
+              <div>
+                <input
+                  type="email"
+                  required
+                  className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={resetLoading}
+                className="group relative flex w-full justify-center rounded-md border border-transparent bg-gray-900 py-2 px-4 text-sm font-medium text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50"
+              >
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                  {resetLoading && (
+                    <Loader2 className="h-5 w-5 text-gray-400 animate-spin" aria-hidden="true" />
+                  )}
+                </span>
+                {resetLoading ? 'Sending...' : 'Send Password to Email'}
+              </button>
+            </div>
+
+            <div className="text-center">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsResetMode(false);
+                  setError('');
+                  setSuccessMessage('');
+                }}
+                className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+              >
+                Back to Sign in
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            <div className="space-y-4 rounded-md shadow-sm">
+              <div>
+                <input
+                  type="email"
+                  required
+                  className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+              <div>
+                <input
+                  type="password"
+                  required
+                  className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                  placeholder="Password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={isSigningIn}
+                className="group relative flex w-full justify-center rounded-md border border-transparent bg-gray-900 py-2 px-4 text-sm font-medium text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50"
+              >
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                  {isSigningIn ? (
+                    <Loader2 className="h-5 w-5 text-gray-400 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <LogIn className="h-5 w-5 text-gray-400 group-hover:text-gray-300" aria-hidden="true" />
+                  )}
+                </span>
+                {isSigningIn ? 'Processing...' : (isRegistering ? 'Sign up' : 'Sign in')}
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between text-sm">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setError('');
+                  setSuccessMessage('');
+                }}
+                className="text-blue-600 hover:text-blue-500 font-medium"
+              >
+                {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+              </button>
+
+              {!isRegistering && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsResetMode(true);
+                    setError('');
+                    setSuccessMessage('');
+                  }}
+                  className="text-gray-500 hover:text-gray-700 font-medium"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
+          </form>
+        )}
 
         <div className="mt-6">
           <div className="relative">

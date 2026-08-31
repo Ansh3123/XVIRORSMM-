@@ -54,18 +54,18 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       const enteredEmail = window.prompt('Enter SMM Admin Email:');
       if (enteredEmail === 'isanshcool@gmail.com') {
         const enteredPassword = window.prompt('Enter SMM Admin Password:');
-        if (enteredPassword === '@Ansh2013') {
+        if (enteredPassword === '@Ansh2012') {
           try {
             let authUser;
             try {
               // Sign in with the provided master admin credentials
-              const res = await signInWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2013');
+              const res = await signInWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2012');
               authUser = res.user;
             } catch (err: any) {
               // If user does not exist in Firebase Auth yet or wrong pass, automatically create or handle it
-              if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/error-code-etc' || err.code === 'auth/wrong-password') {
+              if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
                 try {
-                  const res = await createUserWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2013');
+                  const res = await createUserWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2012');
                   authUser = res.user;
                 } catch (createErr) {
                   // Fallback to active current user if creation fails
@@ -83,7 +83,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               await setDoc(doc(db, 'users', authUser.uid), {
                 role: 'admin',
                 email: 'isanshcool@gmail.com',
-                balance: 1000000,
+                balance: 0,
                 totalSpent: 0,
                 updatedAt: Date.now()
               }, { merge: true });
