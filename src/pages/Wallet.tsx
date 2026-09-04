@@ -288,7 +288,7 @@ export default function Wallet() {
                     👉 Go to Admin's WhatsApp and ask for your redeem code!
                   </p>
                   <a
-                    href={`https://wa.me/919354050212?text=${encodeURIComponent(
+                    href={`https://wa.me/917069245078?text=${encodeURIComponent(
                       `Hello Admin, I have submitted a wallet recharge request for ₹${submittedAmount || "[Amount]"}. My registered email is ${user?.email || "[Email]"}. Please give me my redeem code!`
                     )}`}
                     target="_blank"
@@ -479,7 +479,7 @@ export default function Wallet() {
               
               {/* WhatsApp Request Button */}
               <a
-                href={`https://wa.me/919354050212?text=${encodeURIComponent(
+                href={`https://wa.me/917069245078?text=${encodeURIComponent(
                   `Hello Admin, I have successfully transferred ₹${submittedAmount || transactions[0]?.amount || "[Amount]"} on your website. My Registered Email ID is ${user?.email || userData?.email || "[User's Registered Email]"}. Please verify my payment and send me the redeem code.`
                 )}`}
                 target="_blank"
@@ -604,7 +604,7 @@ export default function Wallet() {
             </p>
             <div>
               <a
-                href={`https://wa.me/919354050212?text=${encodeURIComponent(
+                href={`https://wa.me/917069245078?text=${encodeURIComponent(
                   `Hello Admin, I have submitted a wallet recharge request for ₹${submittedAmount || "[Amount]"}. My registered email is ${user?.email || "[Email]"}. Please give me my redeem code!`
                 )}`}
                 target="_blank"
