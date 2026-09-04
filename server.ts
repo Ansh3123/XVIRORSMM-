@@ -481,41 +481,56 @@ async function startServer() {
         });
       }
 
-      // Seed in batches of 400
-      const batchSize = 400;
-      let seededCount = 0;
-      for (let i = 0; i < codesToSeed.length; i += batchSize) {
-        const chunk = codesToSeed.slice(i, i + batchSize);
-        const writes = chunk.map(item => ({
-          update: {
-            name: `projects/${projectId}/databases/(default)/documents/redeemCodes/${item.code}`,
-            fields: {
-              code: { stringValue: item.code },
-              amount: { doubleValue: item.amount },
-              status: { stringValue: item.status },
-              createdAt: { integerValue: String(item.createdAt) }
+      // Respond IMMEDIATELY to prevent client-side/proxy timeouts or JSON parse errors!
+      res.json({ 
+        success: true, 
+        message: `Seeding of ${codesToSeed.length} codes initiated! They are being populated in the background and will appear in a few seconds.` 
+      });
+
+      // Run the seeding loop in the background!
+      (async () => {
+        const batchSize = 100; // Smaller batches are safer
+        for (let i = 0; i < codesToSeed.length; i += batchSize) {
+          const chunk = codesToSeed.slice(i, i + batchSize);
+          const writes = chunk.map(item => ({
+            update: {
+              name: `projects/${projectId}/databases/(default)/documents/redeemCodes/${item.code}`,
+              fields: {
+                code: { stringValue: item.code },
+                amount: { doubleValue: item.amount },
+                status: { stringValue: item.status },
+                createdAt: { integerValue: String(item.createdAt) }
+              }
             }
+          }));
+
+          const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit?key=${apiKey}`;
+          try {
+            const commitRes = await fetch(commitUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ writes })
+            });
+            if (!commitRes.ok) {
+              const text = await commitRes.text();
+              console.error(`Background batch seeding failed for chunk starting at ${i}:`, text);
+            } else {
+              console.log(`Successfully seeded chunk starting at ${i} (${chunk.length} codes)`);
+            }
+          } catch (e) {
+            console.error(`Background batch seeding fetch error for chunk starting at ${i}:`, e);
           }
-        }));
-
-        const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit?key=${apiKey}`;
-        const commitRes = await fetch(commitUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ writes })
-        });
-        if (!commitRes.ok) {
-          const text = await commitRes.text();
-          console.error(`Batch seeding failed for chunk starting at ${i}:`, text);
-          return res.status(500).json({ success: false, message: "Batch seeding failed", details: text });
+          // Add a minor sleep delay to stagger writes and prevent rate limits
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
-        seededCount += chunk.length;
-      }
+      })().catch(e => console.error("Asynchronous background seeding process crash:", e));
 
-      return res.json({ success: true, message: `Successfully seeded ${seededCount} redeem codes!`, count: seededCount });
     } catch (err: any) {
       console.error("Seed API Error:", err);
-      return res.status(500).json({ success: false, message: err.message || "Internal server error" });
+      // Ensure we always return JSON on error!
+      if (!res.headersSent) {
+        return res.status(500).json({ success: false, message: err.message || "Internal server error" });
+      }
     }
   });
 
