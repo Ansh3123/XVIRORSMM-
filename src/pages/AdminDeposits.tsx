@@ -21,7 +21,9 @@ interface RechargeRequest {
 }
 
 export default function AdminDeposits() {
-  const { userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
+  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
   const [requests, setRequests] = useState<RechargeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export default function AdminDeposits() {
 
   // Live real-time Firestore listener for all wallet recharge requests
   useEffect(() => {
-    if (userData?.role !== 'admin') return;
+    if (!isAdmin) return;
 
     setError(null);
     const q = query(collection(db, 'walletRechargeRequests'));
@@ -300,7 +302,7 @@ export default function AdminDeposits() {
     );
   }
 
-  if (userData?.role !== 'admin') {
+  if (!isAdmin) {
     return <div className="p-8 text-center text-red-500 font-semibold">Access Denied</div>;
   }
 

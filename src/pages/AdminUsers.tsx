@@ -5,13 +5,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 export default function AdminUsers() {
-  const { userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
+  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userData?.role === 'admin') fetchUsers();
-  }, [userData]);
+    if (isAdmin) fetchUsers();
+  }, [isAdmin]);
 
   const fetchUsers = async () => {
     try {
@@ -49,7 +51,7 @@ export default function AdminUsers() {
     );
   }
 
-  if (userData?.role !== 'admin') {
+  if (!isAdmin) {
     return <div className="p-8 text-center text-red-500 font-semibold">Access Denied</div>;
   }
 

@@ -18,8 +18,8 @@ import { cn } from '../lib/utils';
 
 export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; setMobileOpen?: (val: boolean) => void }) {
   const location = useLocation();
-  const { userData, logout } = useAuth();
-  const isAdmin = userData?.role === 'admin';
+  const { user, userData, logout } = useAuth();
+  const isAdmin = userData?.role === 'admin' || user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
 
   const userNavigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },

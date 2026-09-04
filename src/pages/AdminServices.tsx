@@ -6,7 +6,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { Service, fetchSMMServices } from '../lib/smm';
 
 export default function AdminServices() {
-  const { userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
+  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
+
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -14,7 +17,7 @@ export default function AdminServices() {
   const [currentService, setCurrentService] = useState<Partial<Service>>({ status: 'active' });
 
   const fetchServices = async () => {
-    if (userData?.role !== 'admin') return;
+    if (!isAdmin) return;
     setLoading(true);
     try {
       // 1. Fetch from SMM helper (handles backend API, CORS, and static local backups)
@@ -60,8 +63,10 @@ export default function AdminServices() {
   };
 
   useEffect(() => {
-    fetchServices();
-  }, [userData]);
+    if (isAdmin) {
+      fetchServices();
+    }
+  }, [isAdmin]);
 
   if (authLoading) {
     return (
@@ -71,13 +76,12 @@ export default function AdminServices() {
     );
   }
 
-  if (userData?.role !== 'admin') {
+  if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-12 text-gray-500">
         <ShieldAlert className="w-12 h-12 mb-4 text-red-500" />
         <h2 className="text-xl font-semibold text-gray-900">Access Denied</h2>
         <p className="mt-2 text-sm">You do not have permission to view this page. You must be an administrator.</p>
-        <p className="mt-4 text-xs text-gray-400">To test this, change your role to 'admin' in Firestore manually.</p>
       </div>
     );
   }

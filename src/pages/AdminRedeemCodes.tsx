@@ -30,7 +30,10 @@ interface RedeemCode {
 const DENOMINATIONS = [10, 20, 30, 50, 100, 200, 500, 1000];
 
 export default function AdminRedeemCodes() {
-  const { userData } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
+  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
+
   const { showToast } = useToast();
   const [codes, setCodes] = useState<RedeemCode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,7 @@ export default function AdminRedeemCodes() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Available' | 'Redeemed'>('all');
 
   const fetchCodes = async (silent = false) => {
+    if (!isAdmin) return;
     if (!silent) setLoading(true);
     else setRefreshing(true);
 
@@ -81,8 +85,10 @@ export default function AdminRedeemCodes() {
   };
 
   useEffect(() => {
-    fetchCodes();
-  }, []);
+    if (isAdmin) {
+      fetchCodes();
+    }
+  }, [isAdmin]);
 
   const handleSeed = async () => {
     setSeeding(true);
@@ -93,7 +99,7 @@ export default function AdminRedeemCodes() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          adminEmail: userData?.email || ''
+          adminEmail: user?.email || userData?.email || ''
         })
       });
 
@@ -142,13 +148,17 @@ export default function AdminRedeemCodes() {
     return matchesDenom && matchesSearch && matchesStatus;
   });
 
-  if (loading) {
+  if (authLoading || (isAdmin && loading)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
         <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
         <p className="text-sm font-medium text-gray-500">Loading redeem codes database...</p>
       </div>
     );
+  }
+
+  if (!isAdmin) {
+    return <div className="p-8 text-center text-red-500 font-semibold">Access Denied</div>;
   }
 
   return (

@@ -68,170 +68,23 @@ async function startServer() {
     }
   });
 
-  // Send recharge notification email to Admin (anshgupta4525@gmail.com) with action buttons
+  // Send recharge notification email to Admin (anshgupta4525@gmail.com) with action buttons (Disabled)
   app.post("/api/notify-recharge", async (req, res) => {
     try {
-      const { txId, userEmail, amount, origin } = req.body;
+      const { txId, userEmail, amount } = req.body;
       if (!txId || !userEmail || amount === undefined) {
         return res.status(400).json({ success: false, message: "Missing required fields" });
       }
 
-      // Load firebase configs to get Gmail token & SMTP settings
-      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-      let firebaseConfig: any = {};
-      if (fs.existsSync(configPath)) {
-        firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      }
-      const projectId = firebaseConfig.projectId || "concrete-spider-c46tg";
-      const apiKey = firebaseConfig.apiKey || "";
-
-      // 1. Fetch SMTP settings from Firestore
-      const smtpUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/config/smtp?key=${apiKey}`;
-      let smtpConfig: any = null;
-      try {
-        const smtpResponse = await fetch(smtpUrl);
-        if (smtpResponse.ok) {
-          const smtpData = await smtpResponse.json();
-          const fields = smtpData.fields;
-          if (fields) {
-            smtpConfig = {
-              user: fields.user?.stringValue || "",
-              pass: fields.pass?.stringValue || "",
-              host: fields.host?.stringValue || "smtp.gmail.com",
-              port: fields.port?.stringValue || "465"
-            };
-          }
-        }
-      } catch (smtpFetchErr) {
-        console.error("Error fetching SMTP config from Firestore:", smtpFetchErr);
-      }
-
-      // 2. Fetch Gmail token from Firestore secrets/gmail
-      const secretUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/secrets/gmail?key=${apiKey}`;
-      let accessToken = "";
-      try {
-        const secretResponse = await fetch(secretUrl);
-        if (secretResponse.ok) {
-          const secretData = await secretResponse.json();
-          accessToken = secretData.fields?.accessToken?.stringValue || "";
-        }
-      } catch (tokenFetchErr) {
-        console.error("Error fetching Gmail token from Firestore:", tokenFetchErr);
-      }
-
-      const finalOrigin = origin || `${req.protocol}://${req.get('host')}`;
-      const acceptLink = `${finalOrigin}/api/admin-action?action=accept&txId=${txId}`;
-      const rejectLink = `${finalOrigin}/api/admin-action?action=reject&txId=${txId}`;
-
-      const subject = `XVIROR SMM - Recharge Request from ${userEmail}`;
-      const body = `
-        <div style="font-family: sans-serif; padding: 24px; color: #1f2937; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
-          <h2 style="color: #111827; font-size: 20px; font-weight: bold; margin-bottom: 8px; border-bottom: 2px solid #f3f4f6; padding-bottom: 12px;">New Wallet Recharge Request</h2>
-          <p>Hello Admin,</p>
-          <p>A new manual wallet deposit has been requested on XVIROR SMM:</p>
-          <div style="background-color: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 24px; border: 1px solid #f3f4f6;">
-            <div style="margin-bottom: 8px;"><span style="color: #6b7280; font-size: 14px;">User Email:</span> <strong style="color: #111827;">${userEmail}</strong></div>
-            <div><span style="color: #6b7280; font-size: 14px;">Amount Requested:</span> <strong style="color: #10b981; font-size: 18px;">₹${parseFloat(amount).toFixed(2)}</strong></div>
-          </div>
-          <p>Please click one of the buttons below to instantly verify and process this request:</p>
-          <div style="margin-top: 24px; margin-bottom: 24px;">
-            <a href="${acceptLink}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-right: 12px; margin-bottom: 8px;">Verify and Credit Balance</a>
-            <a href="${rejectLink}" style="background-color: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-bottom: 8px;">Reject Request (No Reason)</a>
-          </div>
-          <p style="color: #9ca3af; font-size: 11px; margin-top: 32px; border-top: 1px solid #f3f4f6; padding-top: 12px;">This is an automated system security email sent to anshgupta4525@gmail.com on behalf of XVIROR SMM.</p>
-        </div>
-      `;
-
-      const nodemailer = await import("nodemailer").catch(() => null);
-
-      // Attempt 1: Direct SMTP via Firestore configuration (Most reliable & recommended)
-      if (nodemailer && smtpConfig && smtpConfig.user && smtpConfig.pass) {
-        try {
-          const isSsl = smtpConfig.port === "465";
-          const transporter = nodemailer.createTransport({
-            host: smtpConfig.host || "smtp.gmail.com",
-            port: parseInt(smtpConfig.port || "465"),
-            secure: isSsl,
-            auth: {
-              user: smtpConfig.user,
-              pass: smtpConfig.pass
-            }
-          });
-
-          await transporter.sendMail({
-            from: `"XVIROR SMM" <${smtpConfig.user}>`,
-            to: "anshgupta4525@gmail.com",
-            subject,
-            html: body
-          });
-
-          return res.json({ success: true, message: "Notification email sent to Admin successfully via custom SMTP!" });
-        } catch (smtpErr: any) {
-          console.error("Nodemailer SMTP Config Error (Falling back to other methods):", smtpErr);
-        }
-      }
-
-      // Attempt 2: Fallback via SMTP environment variables
-      if (nodemailer && process.env.GMAIL_USER && process.env.GMAIL_PASS) {
-        try {
-          const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-              user: process.env.GMAIL_USER,
-              pass: process.env.GMAIL_PASS
-            }
-          });
-
-          await transporter.sendMail({
-            from: `"XVIROR SMM" <${process.env.GMAIL_USER}>`,
-            to: "anshgupta4525@gmail.com",
-            subject,
-            html: body
-          });
-
-          return res.json({ success: true, message: "Notification email sent to Admin successfully via fallback SMTP!" });
-        } catch (smtpErr) {
-          console.error("Nodemailer fallback SMTP Error (Falling back to Gmail API):", smtpErr);
-        }
-      }
-
-      // Attempt 3: Fallback via OAuth Gmail API
-      if (accessToken) {
-        try {
-          const emailMime = [
-            `To: anshgupta4525@gmail.com`,
-            'Content-Type: text/html; charset=utf-8',
-            'MIME-Version: 1.0',
-            `Subject: ${subject}`,
-            '',
-            body
-          ].join('\r\n');
-          const base64Raw = Buffer.from(emailMime).toString('base64url');
-
-          const gmailSendResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ raw: base64Raw })
-          });
-
-          if (gmailSendResponse.ok) {
-            return res.json({ success: true, message: "Notification email sent to Admin successfully via Gmail API!" });
-          } else {
-            const errText = await gmailSendResponse.text();
-            console.error("Gmail notification error:", errText);
-          }
-        } catch (gmailErr) {
-          console.error("Gmail notifier exception:", gmailErr);
-        }
-      }
-
-      return res.status(500).json({ success: false, message: "No email providers available (unauthorized Gmail, or missing SMTP credentials)." });
+      console.log(`[Recharge Notification Disabled] txId: ${txId}, userEmail: ${userEmail}, amount: ₹${amount}`);
+      
+      return res.json({ 
+        success: true, 
+        message: "Wallet recharge request successfully registered. Email notification is disabled." 
+      });
     } catch (err: any) {
       console.error("Notify recharge error:", err);
-      return res.status(500).json({ success: false, message: "Internal server error" });
+      return res.json({ success: true, message: "Email notification disabled" });
     }
   });
 

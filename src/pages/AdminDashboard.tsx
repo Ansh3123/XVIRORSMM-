@@ -265,7 +265,7 @@ function SMTPSettings() {
 }
 
 export default function AdminDashboard() {
-  const { userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
 
   if (authLoading) {
     return (
@@ -275,7 +275,10 @@ export default function AdminDashboard() {
     );
   }
 
-  if (userData?.role !== 'admin') {
+  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
+
+  if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-12 text-gray-500">
         <ShieldAlert className="w-12 h-12 mb-4 text-red-500" />
@@ -306,8 +309,6 @@ export default function AdminDashboard() {
       </div>
       
       <EndpointStatus />
-      
-      <SMTPSettings />
     </div>
   );
 }
