@@ -10,7 +10,8 @@ import {
   Settings,
   LogOut,
   Users,
-  X
+  X,
+  Key
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
@@ -36,6 +37,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { name: 'Manage Orders', href: '/admin/orders', icon: ShoppingCart },
     { name: 'Wallet Requests', href: '/admin/deposits', icon: Wallet },
     { name: 'Manage Users', href: '/admin/users', icon: Users },
+    { name: 'Redeem Codes', href: '/admin/redeem-codes', icon: Key },
   ];
 
   const navigation = isAdmin ? [...userNavigation, ...adminNavigation] : userNavigation;

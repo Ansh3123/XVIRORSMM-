@@ -80,6 +80,20 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["userId", "amount", "status", "createdAt"]
+    },
+    "RedeemCode": {
+      "title": "RedeemCode",
+      "description": "Redeemable wallet credit codes",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 50 },
+        "amount": { "type": "number", "minimum": 0 },
+        "status": { "type": "string", "enum": ["Available", "Redeemed"], "maxLength": 20 },
+        "createdAt": { "type": "number" },
+        "redeemedAt": { "type": "number" },
+        "redeemedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["code", "amount", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -106,6 +120,10 @@
     "/walletRechargeRequests/{requestId}": {
       "schema": { "$ref": "#/entities/RechargeRequest" },
       "description": "Stores active wallet recharge requests"
+    },
+    "/redeemCodes/{codeId}": {
+      "schema": { "$ref": "#/entities/RedeemCode" },
+      "description": "Stores redeemable codes and status"
     }
   }
 }

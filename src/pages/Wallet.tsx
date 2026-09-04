@@ -34,6 +34,12 @@ export default function Wallet() {
   const [showReviewPopup, setShowReviewPopup] = useState(false);
   const [showFundsAddedPopup, setShowFundsAddedPopup] = useState(false);
 
+  // Redeem code states
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemSuccess, setRedeemSuccess] = useState<string | null>(null);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+
   const prevTransactionsRef = useRef<Transaction[]>([]);
 
   useEffect(() => {
@@ -198,6 +204,42 @@ export default function Wallet() {
       handleFirestoreError(err, OperationType.CREATE, 'walletRechargeRequests');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRedeem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!redeemCode.trim()) return;
+
+    setRedeeming(true);
+    setRedeemSuccess(null);
+    setRedeemError(null);
+
+    try {
+      const response = await fetch('/api/redeem-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: redeemCode.trim(),
+          userId: user?.uid,
+          userEmail: user?.email || userData?.email || ''
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setRedeemSuccess(data.message);
+        setRedeemCode('');
+      } else {
+        setRedeemError(data.message || 'Failed to redeem code');
+      }
+    } catch (err: any) {
+      console.error("Redeem code error:", err);
+      setRedeemError("An error occurred during redemption. Please try again.");
+    } finally {
+      setRedeeming(false);
     }
   };
 
@@ -415,6 +457,78 @@ export default function Wallet() {
           )}
         </div>
       </div>
+
+      {/* Redeem Code Section - Visible ONLY after a deposit has been attempted/completed */}
+      {(transactions.length > 0 || showSuccess) && (
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 space-y-6">
+          <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+            <Lock className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-bold text-gray-900">Redeem Promotion Code</h2>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
+            <div className="flex-1 space-y-2">
+              <p className="text-sm font-medium text-gray-700">
+                Have you transferred funds? Request your redeem code from the admin to credit your wallet instantly.
+              </p>
+              
+              {/* WhatsApp Request Button */}
+              <a
+                href={`https://wa.me/919354050212?text=${encodeURIComponent(
+                  `Hello Admin, I have successfully transferred ₹${submittedAmount || transactions[0]?.amount || "[Amount]"} on your website. My Registered Email ID is ${user?.email || userData?.email || "[User's Registered Email]"}. Please verify my payment and send me the redeem code.`
+                )}`}
+                target="_blank"
+                referrerPolicy="no-referrer"
+                className="inline-flex items-center space-x-2 px-5 py-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg focus:outline-none"
+              >
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.73-1.45L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.858.002-2.634-1.023-5.11-2.885-6.974C16.592 1.908 14.11 .882 11.48.882c-5.442 0-9.866 4.42-9.87 9.86-.001 1.768.461 3.5 1.336 5.025l-1.01 3.686 3.79-.993zm11.758-6.808c-.31-.156-1.84-.908-2.126-1.01-.286-.104-.494-.156-.701.156-.207.31-.803 1.01-.984 1.217-.181.206-.362.23-.672.074-.31-.156-1.312-.483-2.5-1.543-.923-.824-1.547-1.842-1.728-2.152-.18-.31-.02-.477.136-.632.14-.14.31-.36.465-.54.156-.18.208-.31.31-.517.104-.207.052-.387-.026-.54-.078-.156-.701-1.688-.96-2.312-.25-.603-.504-.522-.689-.533-.18-.01-.385-.011-.592-.011-.207 0-.544.078-.83.388-.286.31-1.088 1.064-1.088 2.593s1.114 3.012 1.27 3.22c.156.207 2.19 3.344 5.305 4.687.74.32 1.318.51 1.77.653.743.236 1.42.203 1.954.123.595-.088 1.84-.75 2.1-1.474.26-.725.26-1.348.181-1.476-.078-.124-.286-.207-.596-.362z" />
+                </svg>
+                <span>Ask the Admin for your redeem code on WhatsApp</span>
+              </a>
+            </div>
+
+            {/* Redeem Input Box */}
+            <form onSubmit={handleRedeem} className="w-full lg:max-w-md bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
+              <label className="block text-sm font-semibold text-gray-800">
+                Enter Redeem Code
+              </label>
+              
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  required
+                  value={redeemCode}
+                  onChange={(e) => setRedeemCode(e.target.value)}
+                  placeholder="XVIROR-XXXX-XXXX"
+                  className="flex-1 rounded-lg border border-gray-300 text-sm px-3.5 py-2.5 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={redeeming || !redeemCode.trim()}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center min-w-[90px]"
+                >
+                  {redeeming ? <Loader2 className="w-4 h-4 animate-spin" /> : "Redeem"}
+                </button>
+              </div>
+
+              {redeemSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-xs font-semibold text-green-700 flex items-center space-x-1.5 animate-fade-in">
+                  <Check className="w-4 h-4 text-green-600 shrink-0" />
+                  <span>{redeemSuccess}</span>
+                </div>
+              )}
+
+              {redeemError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-700 flex items-center space-x-1.5 animate-fade-in">
+                  <X className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{redeemError}</span>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white shadow-sm rounded-lg border border-gray-200">
         <div className="px-4 py-5 border-b border-gray-200 sm:px-6">

@@ -22,6 +22,7 @@ const AdminServices = React.lazy(() => import('./pages/AdminServices'));
 const AdminDeposits = React.lazy(() => import('./pages/AdminDeposits'));
 const AdminOrders = React.lazy(() => import('./pages/AdminOrders'));
 const AdminUsers = React.lazy(() => import('./pages/AdminUsers'));
+const AdminRedeemCodes = React.lazy(() => import('./pages/AdminRedeemCodes'));
 
 function PageLoader() {
   return (
@@ -108,6 +109,11 @@ export default function App() {
               <Route path="/admin/users" element={
                 <Suspense fallback={<PageLoader />}>
                   <AdminUsers />
+                </Suspense>
+              } />
+              <Route path="/admin/redeem-codes" element={
+                <Suspense fallback={<PageLoader />}>
+                  <AdminRedeemCodes />
                 </Suspense>
               } />
             </Route>

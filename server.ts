@@ -76,7 +76,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Missing required fields" });
       }
 
-      // Load firebase configs to get Gmail token
+      // Load firebase configs to get Gmail token & SMTP settings
       const configPath = path.join(process.cwd(), "firebase-applet-config.json");
       let firebaseConfig: any = {};
       if (fs.existsSync(configPath)) {
@@ -85,13 +85,38 @@ async function startServer() {
       const projectId = firebaseConfig.projectId || "concrete-spider-c46tg";
       const apiKey = firebaseConfig.apiKey || "";
 
+      // 1. Fetch SMTP settings from Firestore
+      const smtpUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/config/smtp?key=${apiKey}`;
+      let smtpConfig: any = null;
+      try {
+        const smtpResponse = await fetch(smtpUrl);
+        if (smtpResponse.ok) {
+          const smtpData = await smtpResponse.json();
+          const fields = smtpData.fields;
+          if (fields) {
+            smtpConfig = {
+              user: fields.user?.stringValue || "",
+              pass: fields.pass?.stringValue || "",
+              host: fields.host?.stringValue || "smtp.gmail.com",
+              port: fields.port?.stringValue || "465"
+            };
+          }
+        }
+      } catch (smtpFetchErr) {
+        console.error("Error fetching SMTP config from Firestore:", smtpFetchErr);
+      }
+
+      // 2. Fetch Gmail token from Firestore secrets/gmail
       const secretUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/secrets/gmail?key=${apiKey}`;
-      const secretResponse = await fetch(secretUrl);
-      
       let accessToken = "";
-      if (secretResponse.ok) {
-        const secretData = await secretResponse.json();
-        accessToken = secretData.fields?.accessToken?.stringValue || "";
+      try {
+        const secretResponse = await fetch(secretUrl);
+        if (secretResponse.ok) {
+          const secretData = await secretResponse.json();
+          accessToken = secretData.fields?.accessToken?.stringValue || "";
+        }
+      } catch (tokenFetchErr) {
+        console.error("Error fetching Gmail token from Firestore:", tokenFetchErr);
       }
 
       const finalOrigin = origin || `${req.protocol}://${req.get('host')}`;
@@ -117,6 +142,60 @@ async function startServer() {
         </div>
       `;
 
+      const nodemailer = await import("nodemailer").catch(() => null);
+
+      // Attempt 1: Direct SMTP via Firestore configuration (Most reliable & recommended)
+      if (nodemailer && smtpConfig && smtpConfig.user && smtpConfig.pass) {
+        try {
+          const isSsl = smtpConfig.port === "465";
+          const transporter = nodemailer.createTransport({
+            host: smtpConfig.host || "smtp.gmail.com",
+            port: parseInt(smtpConfig.port || "465"),
+            secure: isSsl,
+            auth: {
+              user: smtpConfig.user,
+              pass: smtpConfig.pass
+            }
+          });
+
+          await transporter.sendMail({
+            from: `"XVIROR SMM" <${smtpConfig.user}>`,
+            to: "anshgupta4525@gmail.com",
+            subject,
+            html: body
+          });
+
+          return res.json({ success: true, message: "Notification email sent to Admin successfully via custom SMTP!" });
+        } catch (smtpErr: any) {
+          console.error("Nodemailer SMTP Config Error (Falling back to other methods):", smtpErr);
+        }
+      }
+
+      // Attempt 2: Fallback via SMTP environment variables
+      if (nodemailer && process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+        try {
+          const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+              user: process.env.GMAIL_USER,
+              pass: process.env.GMAIL_PASS
+            }
+          });
+
+          await transporter.sendMail({
+            from: `"XVIROR SMM" <${process.env.GMAIL_USER}>`,
+            to: "anshgupta4525@gmail.com",
+            subject,
+            html: body
+          });
+
+          return res.json({ success: true, message: "Notification email sent to Admin successfully via fallback SMTP!" });
+        } catch (smtpErr) {
+          console.error("Nodemailer fallback SMTP Error (Falling back to Gmail API):", smtpErr);
+        }
+      }
+
+      // Attempt 3: Fallback via OAuth Gmail API
       if (accessToken) {
         try {
           const emailMime = [
@@ -146,31 +225,6 @@ async function startServer() {
           }
         } catch (gmailErr) {
           console.error("Gmail notifier exception:", gmailErr);
-        }
-      }
-
-      // Fallback via SMTP if configured
-      const nodemailer = await import("nodemailer").catch(() => null);
-      if (nodemailer && process.env.GMAIL_USER && process.env.GMAIL_PASS) {
-        try {
-          const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-              user: process.env.GMAIL_USER,
-              pass: process.env.GMAIL_PASS
-            }
-          });
-
-          await transporter.sendMail({
-            from: `"XVIROR SMM" <${process.env.GMAIL_USER}>`,
-            to: "anshgupta4525@gmail.com",
-            subject,
-            html: body
-          });
-
-          return res.json({ success: true, message: "Notification email sent to Admin successfully via SMTP!" });
-        } catch (smtpErr) {
-          console.error("Nodemailer SMTP Error:", smtpErr);
         }
       }
 
@@ -367,161 +421,247 @@ async function startServer() {
     }
   });
 
-  // Password Recovery endpoint via Gmail API
-  app.post("/api/send-password", async (req, res) => {
+  // Secure Transaction Executor for atomic code redemption
+  async function executeRedeemTransaction(projectId: string, apiKey: string, code: string, userId: string, userEmail: string): Promise<number> {
+    // 1. Begin transaction
+    const beginUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:beginTransaction?key=${apiKey}`;
+    const beginRes = await fetch(beginUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ options: { readWrite: {} } })
+    });
+    if (!beginRes.ok) {
+      const errTxt = await beginRes.text();
+      console.error("Begin transaction failed:", errTxt);
+      throw new Error("Failed to secure connection for transaction. Try again.");
+    }
+    const { transaction } = await beginRes.json();
+
+    // 2. Fetch the redeem code document within transaction
+    const codeUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/redeemCodes/${code}?transaction=${transaction}&key=${apiKey}`;
+    const codeRes = await fetch(codeUrl);
+    if (!codeRes.ok) {
+      if (codeRes.status === 404) {
+        throw new Error("Invalid redeem code.");
+      }
+      throw new Error("Failed to read redeem code in transaction");
+    }
+    const codeDoc = await codeRes.json();
+    const codeFields = codeDoc.fields;
+    if (!codeFields) throw new Error("Invalid code format in database");
+
+    const status = codeFields.status?.stringValue;
+    if (status === "Redeemed") {
+      throw new Error("This redeem code has already been used.");
+    }
+    if (status !== "Available") {
+      throw new Error("This redeem code is no longer available.");
+    }
+
+    let amount = 0;
+    if (codeFields.amount) {
+      if (codeFields.amount.doubleValue !== undefined) amount = Number(codeFields.amount.doubleValue);
+      else if (codeFields.amount.integerValue !== undefined) amount = Number(codeFields.amount.integerValue);
+    }
+    const createdAt = codeFields.createdAt?.integerValue || String(Date.now());
+
+    // 3. Fetch user document within transaction to get current balance
+    const userUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}?transaction=${transaction}&key=${apiKey}`;
+    const userRes = await fetch(userUrl);
+    let currentBalance = 0;
+    let userFields: any = {};
+    if (userRes.ok) {
+      const userDoc = await userRes.json();
+      userFields = userDoc.fields || {};
+      if (userFields.balance) {
+        if (userFields.balance.doubleValue !== undefined) currentBalance = Number(userFields.balance.doubleValue);
+        else if (userFields.balance.integerValue !== undefined) currentBalance = Number(userFields.balance.integerValue);
+      }
+    } else {
+      throw new Error("Please log in before redeeming a code.");
+    }
+
+    const newBalance = currentBalance + amount;
+
+    // 4. Commit transaction with updates
+    const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit?key=${apiKey}`;
+    const txId = "tx_" + Math.random().toString(36).substring(2, 15);
+
+    const updatedUserFields = { ...userFields };
+    updatedUserFields.balance = { doubleValue: newBalance };
+    updatedUserFields.updatedAt = { integerValue: String(Date.now()) };
+
+    const commitBody = {
+      transaction,
+      writes: [
+        {
+          update: {
+            name: `projects/${projectId}/databases/(default)/documents/redeemCodes/${code}`,
+            fields: {
+              code: { stringValue: code },
+              amount: { doubleValue: amount },
+              status: { stringValue: "Redeemed" },
+              createdAt: { integerValue: String(createdAt) },
+              redeemedAt: { integerValue: String(Date.now()) },
+              redeemedBy: { stringValue: userId }
+            }
+          }
+        },
+        {
+          update: {
+            name: `projects/${projectId}/databases/(default)/documents/users/${userId}`,
+            fields: updatedUserFields
+          },
+          updateMask: { fieldPaths: ["balance", "updatedAt"] }
+        },
+        {
+          update: {
+            name: `projects/${projectId}/databases/(default)/documents/transactions/${txId}`,
+            fields: {
+              userId: { stringValue: userId },
+              userEmail: { stringValue: userEmail },
+              amount: { doubleValue: amount },
+              type: { stringValue: "deposit" },
+              status: { stringValue: "completed" },
+              utr: { stringValue: `REDEEM-${code}` },
+              createdAt: { integerValue: String(Date.now()) }
+            }
+          }
+        }
+      ]
+    };
+
+    const commitRes = await fetch(commitUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(commitBody)
+    });
+
+    if (!commitRes.ok) {
+      const errText = await commitRes.text();
+      console.error("Commit transaction failed:", errText);
+      throw new Error("Conflict during parallel redemption. Please try again.");
+    }
+
+    return amount;
+  }
+
+  // 1. Redeem Code API Endpoint
+  app.post("/api/redeem-code", async (req, res) => {
     try {
-      const { email } = req.body;
-      if (!email) {
-        return res.status(400).json({ success: false, message: "Email is required" });
+      const { code, userId, userEmail } = req.body;
+      if (!code) {
+        return res.status(400).json({ success: false, message: "Invalid redeem code." });
+      }
+      if (!userId || !userEmail) {
+        return res.status(401).json({ success: false, message: "Please log in before redeeming a code." });
       }
 
-      // 1. Load Firebase configuration to get project and API key
+      // Load Firebase configuration
       const configPath = path.join(process.cwd(), "firebase-applet-config.json");
       let firebaseConfig: any = {};
       if (fs.existsSync(configPath)) {
         firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
       }
-      const projectId = firebaseConfig.projectId || "concrete-spider-c46tg";
+      const projectId = firebaseConfig.projectId || "xvirorsmm";
       const apiKey = firebaseConfig.apiKey || "";
 
-      // 2. Query Firestore REST API for the user with matching email
-      const queryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery?key=${apiKey}`;
-      const userQueryResponse = await fetch(queryUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          structuredQuery: {
-            from: [{ collectionId: "users" }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: "email" },
-                op: "EQUAL",
-                value: { stringValue: email.trim() }
-              }
-            },
-            limit: 1
-          }
-        })
-      });
-
-      if (!userQueryResponse.ok) {
-        const errText = await userQueryResponse.text();
-        console.error("Firestore user query error:", errText);
-        return res.status(500).json({ success: false, message: "Failed to query user database" });
+      try {
+        const credited = await executeRedeemTransaction(projectId, apiKey, code.trim(), userId, userEmail);
+        return res.json({
+          success: true,
+          message: `Redeemed successfully! ₹${credited} has been added to your wallet.`
+        });
+      } catch (err: any) {
+        console.error("Redeem operation failed:", err.message);
+        return res.status(400).json({ success: false, message: err.message || "Failed to redeem code" });
       }
-
-      const queryResults = await userQueryResponse.json();
-      if (!queryResults || queryResults.length === 0 || !queryResults[0].document) {
-        return res.status(404).json({ success: false, message: "User not found with this email" });
-      }
-
-      const fields = queryResults[0].document.fields;
-      const userPassword = fields?.password?.stringValue;
-      if (!userPassword) {
-        return res.status(400).json({ success: false, message: "No password backup found for this account. Please set a password or sign in with Google." });
-      }
-
-      // 3. Retrieve Gmail OAuth Access Token from Firestore secrets/gmail
-      const secretUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/secrets/gmail?key=${apiKey}`;
-      const secretResponse = await fetch(secretUrl);
-      
-      let accessToken = "";
-      if (secretResponse.ok) {
-        const secretData = await secretResponse.json();
-        accessToken = secretData.fields?.accessToken?.stringValue || "";
-      }
-
-      // 4. Send email using Gmail API
-      if (accessToken) {
-        try {
-          const subject = "XVIROR SMM - Password Recovery";
-          const body = `
-            <div style="font-family: sans-serif; padding: 20px; color: #1f2937; line-height: 1.5;">
-              <h2 style="color: #111827; font-size: 20px; font-weight: bold; margin-bottom: 16px;">Password Recovery</h2>
-              <p>Hello,</p>
-              <p>You requested password recovery for your account: <strong>${email}</strong>.</p>
-              <p style="background-color: #f3f4f6; padding: 12px; border-radius: 6px; font-size: 16px; font-family: monospace; letter-spacing: 1px; color: #111827; display: inline-block; margin: 16px 0;">
-                Your Password: <strong>${userPassword}</strong>
-              </p>
-              <p>For your security, please log in and consider updating your password in your profile settings if needed.</p>
-              <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">This is an automated security email sent from XVIROR SMM.</p>
-            </div>
-          `;
-
-          const emailMime = [
-            `To: ${email}`,
-            'Content-Type: text/html; charset=utf-8',
-            'MIME-Version: 1.0',
-            `Subject: ${subject}`,
-            '',
-            body
-          ].join('\r\n');
-          const base64Raw = Buffer.from(emailMime).toString('base64url');
-
-          const gmailSendResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ raw: base64Raw })
-          });
-
-          if (gmailSendResponse.ok) {
-            return res.json({ success: true, message: "Password recovery email has been sent successfully!" });
-          } else {
-            const errText = await gmailSendResponse.text();
-            console.error("Gmail API sending error:", errText);
-          }
-        } catch (gmailErr) {
-          console.error("Error sending via Gmail API:", gmailErr);
-        }
-      }
-
-      // 5. Reliable fallback using standard Nodemailer if configured
-      const nodemailer = await import("nodemailer").catch(() => null);
-      if (nodemailer && process.env.GMAIL_USER && process.env.GMAIL_PASS) {
-        try {
-          const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-              user: process.env.GMAIL_USER,
-              pass: process.env.GMAIL_PASS
-            }
-          });
-
-          await transporter.sendMail({
-            from: `"XVIROR SMM" <${process.env.GMAIL_USER}>`,
-            to: email,
-            subject: "XVIROR SMM - Password Recovery",
-            html: `
-              <div style="font-family: sans-serif; padding: 20px; color: #1f2937; line-height: 1.5;">
-                <h2 style="color: #111827; font-size: 20px; font-weight: bold; margin-bottom: 16px;">Password Recovery</h2>
-                <p>Hello,</p>
-                <p>You requested password recovery for your account: <strong>${email}</strong>.</p>
-                <p style="background-color: #f3f4f6; padding: 12px; border-radius: 6px; font-size: 16px; font-family: monospace; letter-spacing: 1px; color: #111827; display: inline-block; margin: 16px 0;">
-                  Your Password: <strong>${userPassword}</strong>
-                </p>
-                <p>For your security, please log in and consider updating your password in your profile settings if needed.</p>
-                <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">This is an automated security email sent from XVIROR SMM.</p>
-              </div>
-            `
-          });
-
-          return res.json({ success: true, message: "Password recovery email sent successfully via SMTP fallback!" });
-        } catch (smtpErr) {
-          console.error("Nodemailer SMTP Error:", smtpErr);
-        }
-      }
-
-      return res.status(500).json({ 
-        success: false, 
-        message: "The admin has not authorized Gmail integration yet or Gmail token expired. Please contact support or ask the Admin to log in and re-authorize." 
-      });
-
     } catch (err: any) {
-      console.error("Send password error:", err);
+      console.error("Redeem API error:", err);
       return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  });
+
+  // 2. Seed Redeem Codes API Endpoint
+  app.post("/api/admin/seed-redeem-codes", async (req, res) => {
+    try {
+      const { adminEmail } = req.body;
+      if (adminEmail !== "isanshcool@gmail.com") {
+        return res.status(403).json({ success: false, message: "Unauthorized access" });
+      }
+
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      let firebaseConfig: any = {};
+      if (fs.existsSync(configPath)) {
+        firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      }
+      const projectId = firebaseConfig.projectId || "xvirorsmm";
+      const apiKey = firebaseConfig.apiKey || "";
+
+      const csvPath = path.join(process.cwd(), "src", "data", "raw_redeem_codes.csv");
+      if (!fs.existsSync(csvPath)) {
+        return res.status(404).json({ success: false, message: "Raw CSV not found" });
+      }
+
+      const csvData = fs.readFileSync(csvPath, "utf-8");
+      const lines = csvData.split("\n");
+      const codesToSeed: any[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const firstComma = line.indexOf(",");
+        const secondComma = line.lastIndexOf(",");
+        if (firstComma === -1) continue;
+        
+        const amountStr = line.substring(0, firstComma).trim();
+        const codeStr = line.substring(firstComma + 1, secondComma === firstComma ? line.length : secondComma).trim();
+        
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || !codeStr) continue;
+        
+        codesToSeed.push({
+          code: codeStr,
+          amount,
+          status: "Available",
+          createdAt: Date.now()
+        });
+      }
+
+      // Seed in batches of 400
+      const batchSize = 400;
+      let seededCount = 0;
+      for (let i = 0; i < codesToSeed.length; i += batchSize) {
+        const chunk = codesToSeed.slice(i, i + batchSize);
+        const writes = chunk.map(item => ({
+          update: {
+            name: `projects/${projectId}/databases/(default)/documents/redeemCodes/${item.code}`,
+            fields: {
+              code: { stringValue: item.code },
+              amount: { doubleValue: item.amount },
+              status: { stringValue: item.status },
+              createdAt: { integerValue: String(item.createdAt) }
+            }
+          }
+        }));
+
+        const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit?key=${apiKey}`;
+        const commitRes = await fetch(commitUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ writes })
+        });
+        if (!commitRes.ok) {
+          const text = await commitRes.text();
+          console.error(`Batch seeding failed for chunk starting at ${i}:`, text);
+          return res.status(500).json({ success: false, message: "Batch seeding failed", details: text });
+        }
+        seededCount += chunk.length;
+      }
+
+      return res.json({ success: true, message: `Successfully seeded ${seededCount} redeem codes!`, count: seededCount });
+    } catch (err: any) {
+      console.error("Seed API Error:", err);
+      return res.status(500).json({ success: false, message: err.message || "Internal server error" });
     }
   });
 

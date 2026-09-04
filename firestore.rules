@@ -183,5 +183,9 @@ service cloud.firestore {
                     && incoming().status == 'Open';
       allow update: if isAdmin() && isValidId(ticketId) && isValidTicket(incoming());
     }
+
+    match /redeemCodes/{codeId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
