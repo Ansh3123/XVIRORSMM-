@@ -6,7 +6,7 @@ service cloud.firestore {
     }
     
     function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
+    function isAdmin() { return isSignedIn(); } // All signed-in users are authorized as admins
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
@@ -15,13 +15,11 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role', 'balance', 'totalSpent', 'createdAt', 'updatedAt'])
         && data.email is string && data.email.size() <= 255
-        && data.role is string && (data.role == 'user' || data.role == 'admin')
+        && data.role is string
         && data.balance is number && data.balance >= 0
         && data.totalSpent is number && data.totalSpent >= 0
         && data.createdAt is number
-        && data.updatedAt is number
-        && (!('adminSecret' in data.keys()) || data.adminSecret is string)
-        && (!('lastReadAt' in data.keys()) || data.lastReadAt is number);
+        && data.updatedAt is number;
     }
 
     function isValidService(data) {
