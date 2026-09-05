@@ -29,6 +29,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { name: 'Services', href: '/services', icon: List },
     { name: 'Wallet', href: '/wallet', icon: Wallet },
     { name: 'Tickets', href: '/tickets', icon: TicketIcon },
+    { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
   const adminNavigation = [
@@ -38,6 +39,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { name: 'Wallet Requests', href: '/admin/deposits', icon: Wallet },
     { name: 'Manage Users', href: '/admin/users', icon: Users },
     { name: 'Redeem Codes', href: '/admin/redeem-codes', icon: Key },
+    { name: 'Password Requests', href: '/admin/passwords', icon: Key },
   ];
 
   const navigation = isAdmin ? [...userNavigation, ...adminNavigation] : userNavigation;

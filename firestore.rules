@@ -95,6 +95,17 @@ service cloud.firestore {
         && (!('utr' in data.keys()) || (data.utr is string && data.utr.size() <= 50));
     }
 
+    function isValidPasswordRequest(data) {
+      return data.keys().hasAll(['userId', 'userEmail', 'encryptedNewPassword', 'status', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
+        && data.userEmail is string && data.userEmail.size() <= 255
+        && data.encryptedNewPassword is string && data.encryptedNewPassword.size() <= 1000
+        && data.status is string && (data.status == 'pending' || data.status == 'approved' || data.status == 'rejected')
+        && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000))
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
@@ -116,6 +127,15 @@ service cloud.firestore {
          && incoming().totalSpent == existing().totalSpent
          && incoming().createdAt == existing().createdAt)
       );
+    }
+
+    match /passwordRequests/{requestId} {
+      allow get: if isValidId(requestId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(requestId) && isSignedIn() 
+                    && isValidPasswordRequest(incoming())
+                    && incoming().status == 'pending';
+      allow update: if isAdmin() && isValidId(requestId);
     }
 
     match /broadcasts/{broadcastId} {

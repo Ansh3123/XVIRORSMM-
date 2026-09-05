@@ -94,12 +94,31 @@
         "redeemedBy": { "type": "string", "maxLength": 128 }
       },
       "required": ["code", "amount", "status", "createdAt"]
+    },
+    "PasswordRequest": {
+      "title": "PasswordRequest",
+      "description": "User password change request",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 255 },
+        "encryptedNewPassword": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "maxLength": 20 },
+        "rejectReason": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "userEmail", "encryptedNewPassword", "status", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "Stores user profiles and balances"
+    },
+    "/passwordRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/PasswordRequest" },
+      "description": "Stores password change requests"
     },
     "/services/{serviceId}": {
       "schema": { "$ref": "#/entities/Service" },

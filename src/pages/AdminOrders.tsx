@@ -66,9 +66,11 @@ export default function AdminOrders() {
           ) : (
             orders.map((order) => (
               <li key={order.id} className="p-4 sm:px-6 flex items-center justify-between">
-                <div>
+                <div className="space-y-1">
                   <p className="text-sm font-medium text-gray-900">User ID: {order.userId}</p>
-                  <p className="text-sm text-gray-900">Service ID: {order.serviceId} - Link: {order.link}</p>
+                  <p className="text-sm font-semibold text-gray-800">{order.serviceName || `Service ID: ${order.serviceId}`}</p>
+                  <p className="text-xs text-gray-500">Service ID: {order.serviceId} | Provider Order ID: {order.providerOrderId || 'N/A'}</p>
+                  <p className="text-sm text-gray-600 truncate max-w-md" title={order.link}>Link: {order.link}</p>
                   <p className="text-sm text-gray-500">Qty: {order.quantity} - Charge: ₹{order.charge?.toFixed(2)}</p>
                   <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleString()}</p>
                 </div>

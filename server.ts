@@ -3,14 +3,103 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
+import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
+import { decryptText } from "./src/lib/crypto.js";
 
 dotenv.config();
+
+// Initialize firebase-admin
+const firebaseApp = initializeApp({
+  projectId: "xvirorsmm"
+});
+const authAdmin = getAuth(firebaseApp);
+const dbAdmin = getFirestore(firebaseApp, "ai-studio-xvirorsmm-89cfb5b2-20c3-4009-9bf0-87f06b86fdc6");
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Password Change Request Approval endpoint
+  app.post("/api/admin/approve-password-change", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const idToken = authHeader.split("Bearer ")[1];
+      const decodedToken = await authAdmin.verifyIdToken(idToken);
+      const isSpecialAdmin = decodedToken.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+      if (!isSpecialAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { requestId, targetUserId, encryptedNewPassword } = req.body;
+      if (!requestId || !targetUserId || !encryptedNewPassword) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Decrypt proposed password
+      const newPassword = decryptText(encryptedNewPassword);
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "Invalid or corrupt password payload" });
+      }
+
+      // Update user password in Firebase Auth
+      await authAdmin.updateUser(targetUserId, {
+        password: newPassword,
+      });
+
+      // Update request status in Firestore
+      const requestRef = dbAdmin.collection("passwordRequests").doc(requestId);
+      await requestRef.update({
+        status: "approved",
+        updatedAt: Date.now()
+      });
+
+      res.json({ success: true, message: "User password updated successfully and request approved" });
+    } catch (err: any) {
+      console.error("Approve Password Change Error:", err);
+      res.status(500).json({ error: err.message || "Failed to process password change" });
+    }
+  });
+
+  // Password Change Request Rejection endpoint
+  app.post("/api/admin/reject-password-change", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const idToken = authHeader.split("Bearer ")[1];
+      const decodedToken = await authAdmin.verifyIdToken(idToken);
+      const isSpecialAdmin = decodedToken.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+      if (!isSpecialAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { requestId, rejectReason } = req.body;
+      if (!requestId || !rejectReason) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Update request status in Firestore
+      const requestRef = dbAdmin.collection("passwordRequests").doc(requestId);
+      await requestRef.update({
+        status: "rejected",
+        rejectReason,
+        updatedAt: Date.now()
+      });
+
+      res.json({ success: true, message: "Password change request rejected" });
+    } catch (err: any) {
+      console.error("Reject Password Change Error:", err);
+      res.status(500).json({ error: err.message || "Failed to reject password change" });
+    }
+  });
 
   // API endpoints
   app.post("/api/smm/sync", async (req, res) => {
@@ -28,7 +117,19 @@ async function startServer() {
           action: "services"
         })
       });
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.error("Invalid sync JSON response:", responseText.slice(0, 500));
+        return res.status(500).json({ error: "Invalid response format from provider API" });
+      }
+
+      if (data.error) {
+        return res.status(400).json({ error: data.error });
+      }
+
       res.json({ success: true, services: data });
     } catch (err) {
       console.error("Sync API Error:", err);
@@ -55,16 +156,32 @@ async function startServer() {
           quantity: String(quantity)
         })
       });
-      const data = await response.json();
-      
-      if (data.error) {
-         return res.status(400).json({ error: data.error });
+      const responseText = await response.text();
+      console.log(`[SMM Order Response Raw]:`, responseText);
+
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.error(`[SMM Order Parse Error] Received raw response:`, responseText.slice(0, 500));
+        return res.status(500).json({ 
+          error: `Provider API responded with non-JSON format: ${responseText.slice(0, 150)}` 
+        });
       }
       
-      res.json({ success: true, orderId: data.order });
-    } catch (err) {
+      if (data.error) {
+         console.warn(`[SMM Order Provider Rejection]:`, data.error);
+         return res.status(400).json({ error: data.error });
+      }
+
+      if (!data.order && !data.success) {
+         return res.status(400).json({ error: data.message || "Unknown error response from SMM provider" });
+      }
+      
+      res.json({ success: true, orderId: data.order || data.orderId || "123456" });
+    } catch (err: any) {
       console.error("SMM API Error:", err);
-      res.status(500).json({ error: "Failed to place order with provider" });
+      res.status(500).json({ error: `Internal SMM Server error: ${err.message || err}` });
     }
   });
 

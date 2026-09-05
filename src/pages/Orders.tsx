@@ -100,6 +100,7 @@ export default function Orders() {
                   <tr>
                     <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">ID</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Date</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Service</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Link</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Charge</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Quantity</th>
@@ -109,25 +110,28 @@ export default function Orders() {
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center">
+                      <td colSpan={7} className="px-6 py-12 text-center">
                         <Loader2 className="mx-auto h-8 w-8 text-gray-400 animate-spin" />
                       </td>
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
                         No orders matched your search criteria.
                       </td>
                     </tr>
                   ) : (
-                    filteredOrders.map((order) => (
+                    filteredOrders.map((order: any) => (
                       <tr key={order.id}>
                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{order.id}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           {format(order.createdAt, 'MMM d, yyyy HH:mm')}
                         </td>
+                        <td className="px-3 py-4 text-sm text-gray-900 max-w-xs truncate" title={order.serviceName || order.serviceId}>
+                          {order.serviceName || `Service ID: ${order.serviceId}`}
+                        </td>
                         <td className="px-3 py-4 text-sm text-gray-500 max-w-xs truncate">{order.link}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">₹{order.charge.toFixed(2)}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">₹{order.charge?.toFixed(2)}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{order.quantity}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm">
                           <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(order.status)}`}>

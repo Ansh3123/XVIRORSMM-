@@ -15,6 +15,7 @@ import NewOrder from './pages/NewOrder';
 import Wallet from './pages/Wallet';
 import Orders from './pages/Orders';
 import Tickets from './pages/Tickets';
+import Settings from './pages/Settings';
 
 // Keep admin dashboards lazy loaded for modular code splitting
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
@@ -23,6 +24,7 @@ const AdminDeposits = React.lazy(() => import('./pages/AdminDeposits'));
 const AdminOrders = React.lazy(() => import('./pages/AdminOrders'));
 const AdminUsers = React.lazy(() => import('./pages/AdminUsers'));
 const AdminRedeemCodes = React.lazy(() => import('./pages/AdminRedeemCodes'));
+const AdminPasswords = React.lazy(() => import('./pages/AdminPasswords'));
 
 function PageLoader() {
   return (
@@ -85,6 +87,11 @@ export default function App() {
                   <Tickets />
                 </Suspense>
               } />
+              <Route path="/settings" element={
+                <Suspense fallback={<PageLoader />}>
+                  <Settings />
+                </Suspense>
+              } />
               
               <Route path="/admin" element={
                 <Suspense fallback={<PageLoader />}>
@@ -114,6 +121,11 @@ export default function App() {
               <Route path="/admin/redeem-codes" element={
                 <Suspense fallback={<PageLoader />}>
                   <AdminRedeemCodes />
+                </Suspense>
+              } />
+              <Route path="/admin/passwords" element={
+                <Suspense fallback={<PageLoader />}>
+                  <AdminPasswords />
                 </Suspense>
               } />
             </Route>

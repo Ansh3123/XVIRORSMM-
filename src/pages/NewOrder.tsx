@@ -124,15 +124,25 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!selectedService || !user) return;
     
+    // Immutable Capture at Checkout
+    const checkoutServiceId = selectedService.id;
+    const checkoutServiceName = selectedService.name;
+    const checkoutServicePrice = selectedService.price;
+    const checkoutMinOrder = selectedService.minOrder;
+    const checkoutMaxOrder = selectedService.maxOrder;
+    
     const qty = parseInt(quantity);
-    if (qty < selectedService.minOrder || qty > selectedService.maxOrder) {
-      setError(`Quantity must be between ${selectedService.minOrder} and ${selectedService.maxOrder}`);
+    if (isNaN(qty) || qty < checkoutMinOrder || qty > checkoutMaxOrder) {
+      setError(`Quantity must be between ${checkoutMinOrder} and ${checkoutMaxOrder}`);
       return;
     }
 
-    if ((userData?.balance || 0) < charge) {
+    const orderCharge = (checkoutServicePrice / 1000) * qty;
+
+    if ((userData?.balance || 0) < orderCharge) {
       setError('Insufficient balance. Please add funds to your wallet.');
       return;
     }
@@ -154,14 +164,14 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         const currentBalance = userSnap.data().balance || 0;
         const currentTotalSpent = userSnap.data().totalSpent || 0;
         
-        if (currentBalance < charge) {
+        if (currentBalance < orderCharge) {
           throw new Error("Insufficient balance. Please add funds to your wallet.");
         }
         
         // Deduct balance and increment totalSpent atomically
         transaction.update(userRef, {
-          balance: currentBalance - charge,
-          totalSpent: currentTotalSpent + charge,
+          balance: currentBalance - orderCharge,
+          totalSpent: currentTotalSpent + orderCharge,
           updatedAt: Date.now()
         });
       });
@@ -173,7 +183,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            service: selectedService.id,
+            service: checkoutServiceId,
             link,
             quantity: qty
           })
@@ -186,8 +196,8 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
             const currentBalance = userSnap.data().balance || 0;
             const currentTotalSpent = userSnap.data().totalSpent || 0;
             refundTx.update(userRef, {
-              balance: currentBalance + charge,
-              totalSpent: Math.max(0, currentTotalSpent - charge),
+              balance: currentBalance + orderCharge,
+              totalSpent: Math.max(0, currentTotalSpent - orderCharge),
               updatedAt: Date.now()
             });
           }
@@ -195,7 +205,16 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         throw apiErr;
       }
 
-      if (!apiResponse.ok) {
+      let resData: any = {};
+      try {
+        resData = await apiResponse.json();
+      } catch (e) {
+        // Fallback for parsing
+      }
+
+      if (!apiResponse.ok || resData.error) {
+        const providerError = resData.error || 'API Provider failed to process order';
+
         // Safe refund if SMM provider rejects the order
         await runTransaction(db, async (refundTx) => {
           const userSnap = await refundTx.get(userRef);
@@ -203,23 +222,27 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
             const currentBalance = userSnap.data().balance || 0;
             const currentTotalSpent = userSnap.data().totalSpent || 0;
             refundTx.update(userRef, {
-              balance: currentBalance + charge,
-              totalSpent: Math.max(0, currentTotalSpent - charge),
+              balance: currentBalance + orderCharge,
+              totalSpent: Math.max(0, currentTotalSpent - orderCharge),
               updatedAt: Date.now()
             });
           }
         });
-        throw new Error('API Provider failed to process order');
+        throw new Error(providerError);
       }
 
-      // 3. Document the successful order
+      const providerOrderId = String(resData.orderId || resData.order || '');
+
+      // 3. Document the successful order with immutable checkout details
       await addDoc(collection(db, 'orders'), {
         userId: user.uid,
-        serviceId: selectedService.id,
+        serviceId: checkoutServiceId,
+        serviceName: checkoutServiceName,
         link,
         quantity: qty,
-        charge,
-        status: 'Completed', 
+        charge: orderCharge,
+        providerOrderId,
+        status: 'Processing', 
         createdAt: Date.now(),
         updatedAt: Date.now()
       });

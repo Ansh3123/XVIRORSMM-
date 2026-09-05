@@ -148,10 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (userCredential?.user) {
-      // Store/Backup password securely in user document for recovery requests
       const userRef = doc(db, 'users', userCredential.user.uid);
       await setDoc(userRef, {
-        password: targetPass,
         adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined,
         updatedAt: Date.now()
       }, { merge: true });
@@ -170,7 +168,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         balance: 0,
         totalSpent: 0,
         email: email,
-        password: targetPass,
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
