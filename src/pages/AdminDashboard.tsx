@@ -2,8 +2,208 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ShieldAlert, Users, ShoppingCart, List, Wallet, Activity, CheckCircle2, XCircle, Loader2, Mail, Key, Server, Hash } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend 
+} from 'recharts';
+
+function SMMProviderStatus() {
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const checkStatus = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/admin/smm/status');
+      const data = await response.json();
+      setStatus(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch SMM status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-8">
+      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+        <div className="flex items-center space-x-2">
+          <Server className="w-6 h-6 text-blue-600" />
+          <h2 className="text-xl font-bold text-gray-900">SMM Provider Connectivity</h2>
+        </div>
+        <button 
+          onClick={checkStatus} 
+          disabled={loading}
+          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors cursor-pointer"
+          title="Refresh Status"
+        >
+          <Activity className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          <span className="ml-2 text-sm text-gray-500">Checking SMM provider connection...</span>
+        </div>
+      ) : error || !status ? (
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm flex items-start space-x-2">
+          <XCircle className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold">Provider Offline or Unreachable</p>
+            <p className="text-xs mt-1 text-red-600">{error || 'Could not fetch connectivity data'}</p>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-400 font-semibold block uppercase">Connectivity</span>
+              <span className={`text-lg font-bold flex items-center mt-1 ${status.status === 'online' ? 'text-green-600' : 'text-red-600'}`}>
+                <span className={`w-2.5 h-2.5 rounded-full mr-2 ${status.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                {status.status === 'online' ? 'Operational' : 'Offline'}
+              </span>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-400 font-semibold block uppercase">SMM API Balance</span>
+              <span className="text-lg font-bold text-gray-900 block mt-1">
+                {status.status === 'online' ? `${status.currency === 'INR' ? '₹' : '$'}${status.balance}` : 'N/A'}
+              </span>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-xs text-gray-400 font-semibold block uppercase">API Latency (Ping)</span>
+              <span className="text-lg font-bold text-gray-900 block mt-1">
+                {status.status === 'online' ? `${status.ping}ms` : 'N/A'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center text-xs text-gray-500 bg-gray-50 p-3 rounded border border-gray-100">
+            <span className="font-semibold mr-1">Active SMM Gateway Endpoint:</span>
+            <span className="font-mono text-gray-700 truncate">{status.provider}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DashboardVisualization() {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTrendData = async () => {
+      try {
+        const last7Days = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          return {
+            dateStr: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            start: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0).getTime(),
+            end: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime(),
+            Deposits: 0,
+            Orders: 0
+          };
+        }).reverse();
+
+        const depositsSnap = await getDocs(query(collection(db, 'walletRechargeRequests')));
+        const ordersSnap = await getDocs(query(collection(db, 'orders')));
+
+        depositsSnap.docs.forEach(doc => {
+          const item = doc.data();
+          if (item.createdAt && item.status === 'accepted') {
+            const time = item.createdAt;
+            const match = last7Days.find(d => time >= d.start && time <= d.end);
+            if (match) {
+              match.Deposits += Number(item.amount || 0);
+            }
+          }
+        });
+
+        ordersSnap.docs.forEach(doc => {
+          const item = doc.data();
+          if (item.createdAt) {
+            const time = item.createdAt;
+            const match = last7Days.find(d => time >= d.start && time <= d.end);
+            if (match) {
+              match.Orders += Number(item.charge || 0);
+            }
+          }
+        });
+
+        setData(last7Days);
+      } catch (err) {
+        console.error("Failed to load trend visualization data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrendData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-8 flex flex-col items-center justify-center h-80">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+        <span className="text-sm text-gray-500">Generating trends visualization chart...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-8">
+      <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-3">
+        <div className="flex items-center space-x-2">
+          <Activity className="w-6 h-6 text-blue-600" />
+          <h2 className="text-xl font-bold text-gray-900">Deposits & Spend Trends (7 Days)</h2>
+        </div>
+        <span className="text-xs text-gray-400 font-semibold uppercase">Real-time Stats</span>
+      </div>
+
+      <div className="h-80 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorDeposits" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10B981" stopOpacity={0.2}/>
+                <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+              </linearGradient>
+              <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/>
+                <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+            <XAxis dataKey="dateStr" stroke="#6B7280" fontSize={11} tickLine={false} />
+            <YAxis stroke="#6B7280" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+            <Tooltip 
+              formatter={(value) => [`₹${value}`, undefined]}
+              contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #E5E7EB', fontSize: '12px' }}
+            />
+            <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '12px' }} />
+            <Area name="Approved Deposits" type="monotone" dataKey="Deposits" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorDeposits)" />
+            <Area name="SMM Spend (Orders)" type="monotone" dataKey="Orders" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorOrders)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 function EndpointStatus() {
   const [endpoints, setEndpoints] = useState([
@@ -306,6 +506,15 @@ export default function AdminDashboard() {
             <p className="mt-2 text-sm text-gray-500">{link.desc}</p>
           </Link>
         ))}
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">
+          <DashboardVisualization />
+        </div>
+        <div>
+          <SMMProviderStatus />
+        </div>
       </div>
       
       <EndpointStatus />

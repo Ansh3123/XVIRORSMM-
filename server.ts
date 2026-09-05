@@ -185,6 +185,65 @@ async function startServer() {
     }
   });
 
+  app.get("/api/admin/smm/status", async (req, res) => {
+    try {
+      const apiKey = process.env.SMM_API_KEY || "5460e2b35d4adbc9a7d81947feca3f2fd9aa0931";
+      const apiUrl = process.env.SMM_API_URL || "https://themainsmmprovider.com/api/v2";
+
+      const startTime = Date.now();
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          key: apiKey,
+          action: "balance"
+        })
+      });
+
+      const responseTime = Date.now() - startTime;
+      const responseText = await response.text();
+      let data: any = null;
+      let parseFailed = false;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        parseFailed = true;
+      }
+
+      if (!response.ok || parseFailed || (data && data.error)) {
+        const errorMsg = data?.error || (parseFailed ? `Invalid response format: ${responseText.slice(0, 100)}` : `HTTP Error ${response.status}`);
+        return res.json({
+          success: false,
+          status: "offline",
+          error: errorMsg,
+          ping: responseTime,
+          provider: apiUrl
+        });
+      }
+
+      res.json({
+        success: true,
+        status: "online",
+        ping: responseTime,
+        balance: data.balance || "0",
+        currency: data.currency || "INR",
+        provider: apiUrl
+      });
+    } catch (err: any) {
+      console.error("SMM Status Check Error:", err);
+      res.json({
+        success: false,
+        status: "offline",
+        error: err.message || String(err),
+        ping: 0,
+        provider: process.env.SMM_API_URL || "https://themainsmmprovider.com/api/v2"
+      });
+    }
+  });
+
   // Send recharge notification email to Admin (anshgupta4525@gmail.com) with action buttons (Disabled)
   app.post("/api/notify-recharge", async (req, res) => {
     try {
@@ -221,9 +280,10 @@ async function startServer() {
       }
       const projectId = firebaseConfig.projectId || "concrete-spider-c46tg";
       const apiKey = firebaseConfig.apiKey || "";
+      const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
 
       // 2. Fetch the recharge request document from Firestore
-      const txUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/walletRechargeRequests/${txId}?key=${apiKey}`;
+      const txUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/walletRechargeRequests/${txId}?key=${apiKey}`;
       const txResponse = await fetch(txUrl);
       if (!txResponse.ok) {
         return res.status(404).send("<h1>Request Not Found</h1><p>The specified wallet recharge request was not found or has been deleted.</p>");
@@ -253,7 +313,7 @@ async function startServer() {
 
       if (action === 'accept') {
         // Fetch user document to get current balance
-        const userUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}?key=${apiKey}`;
+        const userUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${userId}?key=${apiKey}`;
         const userResponse = await fetch(userUrl);
         let currentBalance = 0;
         let userFields: any = {};
@@ -269,7 +329,7 @@ async function startServer() {
         const newBalance = currentBalance + amount;
 
         // a. Update User Balance in Firestore via PATCH
-        const patchUserUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=${apiKey}`;
+        const patchUserUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${userId}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=${apiKey}`;
         await fetch(patchUserUrl, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -282,7 +342,7 @@ async function startServer() {
         });
 
         // b. Update Request Status to 'accepted'
-        const patchTxUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/walletRechargeRequests/${txId}?updateMask.fieldPaths=status&updateMask.fieldPaths=processedAt&updateMask.fieldPaths=updatedAt&key=${apiKey}`;
+        const patchTxUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/walletRechargeRequests/${txId}?updateMask.fieldPaths=status&updateMask.fieldPaths=processedAt&updateMask.fieldPaths=updatedAt&key=${apiKey}`;
         await fetch(patchTxUrl, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -296,7 +356,7 @@ async function startServer() {
         });
 
         // c. Add Transaction Record
-        const transactionUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/transactions?key=${apiKey}`;
+        const transactionUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/transactions?key=${apiKey}`;
         await fetch(transactionUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -343,7 +403,7 @@ async function startServer() {
         `);
       } else {
         // action === 'reject' (rejecting without any reason as requested by the user)
-        const patchTxUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/walletRechargeRequests/${txId}?updateMask.fieldPaths=status&updateMask.fieldPaths=processedAt&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=rejectReason&key=${apiKey}`;
+        const patchTxUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/walletRechargeRequests/${txId}?updateMask.fieldPaths=status&updateMask.fieldPaths=processedAt&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=rejectReason&key=${apiKey}`;
         await fetch(patchTxUrl, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -392,9 +452,9 @@ async function startServer() {
   });
 
   // Secure Transaction Executor for atomic code redemption
-  async function executeRedeemTransaction(projectId: string, apiKey: string, code: string, userId: string, userEmail: string): Promise<number> {
+  async function executeRedeemTransaction(projectId: string, apiKey: string, code: string, userId: string, userEmail: string, databaseId: string): Promise<number> {
     // 1. Begin transaction
-    const beginUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:beginTransaction?key=${apiKey}`;
+    const beginUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:beginTransaction?key=${apiKey}`;
     const beginRes = await fetch(beginUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -408,7 +468,7 @@ async function startServer() {
     const { transaction } = await beginRes.json();
 
     // 2. Fetch the redeem code document within transaction
-    const codeUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/redeemCodes/${code}?transaction=${transaction}&key=${apiKey}`;
+    const codeUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/redeemCodes/${code}?transaction=${transaction}&key=${apiKey}`;
     const codeRes = await fetch(codeUrl);
     if (!codeRes.ok) {
       if (codeRes.status === 404) {
@@ -436,7 +496,7 @@ async function startServer() {
     const createdAt = codeFields.createdAt?.integerValue || String(Date.now());
 
     // 3. Fetch user document within transaction to get current balance
-    const userUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}?transaction=${transaction}&key=${apiKey}`;
+    const userUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${userId}?transaction=${transaction}&key=${apiKey}`;
     const userRes = await fetch(userUrl);
     let currentBalance = 0;
     let userFields: any = {};
@@ -454,7 +514,7 @@ async function startServer() {
     const newBalance = currentBalance + amount;
 
     // 4. Commit transaction with updates
-    const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit?key=${apiKey}`;
+    const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:commit?key=${apiKey}`;
     const txId = "tx_" + Math.random().toString(36).substring(2, 15);
 
     const updatedUserFields = { ...userFields };
@@ -466,7 +526,7 @@ async function startServer() {
       writes: [
         {
           update: {
-            name: `projects/${projectId}/databases/(default)/documents/redeemCodes/${code}`,
+            name: `projects/${projectId}/databases/${databaseId}/documents/redeemCodes/${code}`,
             fields: {
               code: { stringValue: code },
               amount: { doubleValue: amount },
@@ -479,14 +539,14 @@ async function startServer() {
         },
         {
           update: {
-            name: `projects/${projectId}/databases/(default)/documents/users/${userId}`,
+            name: `projects/${projectId}/databases/${databaseId}/documents/users/${userId}`,
             fields: updatedUserFields
           },
           updateMask: { fieldPaths: ["balance", "updatedAt"] }
         },
         {
           update: {
-            name: `projects/${projectId}/databases/(default)/documents/transactions/${txId}`,
+            name: `projects/${projectId}/databases/${databaseId}/documents/transactions/${txId}`,
             fields: {
               userId: { stringValue: userId },
               userEmail: { stringValue: userEmail },
@@ -535,9 +595,10 @@ async function startServer() {
       }
       const projectId = firebaseConfig.projectId || "xvirorsmm";
       const apiKey = firebaseConfig.apiKey || "";
+      const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
 
       try {
-        const credited = await executeRedeemTransaction(projectId, apiKey, code.trim(), userId, userEmail);
+        const credited = await executeRedeemTransaction(projectId, apiKey, code.trim(), userId, userEmail, databaseId);
         return res.json({
           success: true,
           message: `Redeemed successfully! ₹${credited} has been added to your wallet.`
@@ -568,6 +629,7 @@ async function startServer() {
       }
       const projectId = firebaseConfig.projectId || "xvirorsmm";
       const apiKey = firebaseConfig.apiKey || "";
+      const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
 
       const csvPath = path.join(process.cwd(), "src", "data", "raw_redeem_codes.csv");
       if (!fs.existsSync(csvPath)) {
@@ -611,7 +673,7 @@ async function startServer() {
           const chunk = codesToSeed.slice(i, i + batchSize);
           const writes = chunk.map(item => ({
             update: {
-              name: `projects/${projectId}/databases/(default)/documents/redeemCodes/${item.code}`,
+              name: `projects/${projectId}/databases/${databaseId}/documents/redeemCodes/${item.code}`,
               fields: {
                 code: { stringValue: item.code },
                 amount: { doubleValue: item.amount },
@@ -621,7 +683,7 @@ async function startServer() {
             }
           }));
 
-          const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit?key=${apiKey}`;
+          const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:commit?key=${apiKey}`;
           try {
             const commitRes = await fetch(commitUrl, {
               method: "POST",
