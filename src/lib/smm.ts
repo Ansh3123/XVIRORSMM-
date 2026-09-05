@@ -1,5 +1,5 @@
-const SMM_API_KEY = "5460e2b35d4adbc9a7d81947feca3f2fd9aa0931";
-const SMM_API_URL = "https://themainsmmprovider.com/api/v2";
+const SMM_API_KEY = "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3";
+const SMM_API_URL = "https://mysmmapi.com/api/v2";
 
 export interface Service {
   id: string;

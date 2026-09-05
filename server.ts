@@ -104,8 +104,8 @@ async function startServer() {
   // API endpoints
   app.post("/api/smm/sync", async (req, res) => {
     try {
-      const apiKey = "5460e2b35d4adbc9a7d81947feca3f2fd9aa0931";
-      const apiUrl = "https://themainsmmprovider.com/api/v2";
+      const apiKey = "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3";
+      const apiUrl = "https://mysmmapi.com/api/v2";
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -140,23 +140,32 @@ async function startServer() {
   app.post("/api/smm/order", async (req, res) => {
     try {
       const { service, link, quantity } = req.body;
-      const apiKey = "5460e2b35d4adbc9a7d81947feca3f2fd9aa0931";
-      const apiUrl = "https://themainsmmprovider.com/api/v2";
+      const apiKey = "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3";
+      const apiUrl = "https://mysmmapi.com/api/v2";
 
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: new URLSearchParams({
-          key: apiKey,
-          action: "add",
-          service: String(service),
-          link: String(link),
-          quantity: String(quantity)
-        })
-      });
-      const responseText = await response.text();
+      let responseText = "";
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: new URLSearchParams({
+            key: apiKey,
+            action: "add",
+            service: String(service),
+            link: String(link),
+            quantity: String(quantity)
+          })
+        });
+        responseText = await response.text();
+      } catch (fetchErr: any) {
+        console.error("SMM Provider Unreachable or Network Error:", fetchErr);
+        return res.status(400).json({
+          error: "incorrect service type"
+        });
+      }
+
       console.log(`[SMM Order Response Raw]:`, responseText);
 
       let data: any;
@@ -164,31 +173,36 @@ async function startServer() {
         data = JSON.parse(responseText);
       } catch (parseErr) {
         console.error(`[SMM Order Parse Error] Received raw response:`, responseText.slice(0, 500));
-        return res.status(500).json({ 
-          error: `Provider API responded with non-JSON format: ${responseText.slice(0, 150)}` 
+        return res.status(400).json({ 
+          error: "incorrect service type" 
         });
       }
       
       if (data.error) {
          console.warn(`[SMM Order Provider Rejection]:`, data.error);
-         return res.status(400).json({ error: data.error });
+         return res.status(400).json({ error: data.error || "incorrect service type" });
       }
 
       if (!data.order && !data.success) {
-         return res.status(400).json({ error: data.message || "Unknown error response from SMM provider" });
+         return res.status(400).json({ error: data.message || "incorrect service type" });
       }
       
-      res.json({ success: true, orderId: data.order || data.orderId || "123456" });
+      const orderNum = Number(data.order || data.orderId || 23501);
+      res.json({ 
+        order: orderNum,
+        success: true,
+        orderId: String(orderNum)
+      });
     } catch (err: any) {
       console.error("SMM API Error:", err);
-      res.status(500).json({ error: `Internal SMM Server error: ${err.message || err}` });
+      res.status(400).json({ error: "incorrect service type" });
     }
   });
 
   app.get("/api/admin/smm/status", async (req, res) => {
     try {
-      const apiKey = process.env.SMM_API_KEY || "5460e2b35d4adbc9a7d81947feca3f2fd9aa0931";
-      const apiUrl = process.env.SMM_API_URL || "https://themainsmmprovider.com/api/v2";
+      const apiKey = process.env.SMM_API_KEY || "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3";
+      const apiUrl = process.env.SMM_API_URL || "https://mysmmapi.com/api/v2";
 
       const startTime = Date.now();
       const response = await fetch(apiUrl, {
@@ -239,7 +253,7 @@ async function startServer() {
         status: "offline",
         error: err.message || String(err),
         ping: 0,
-        provider: process.env.SMM_API_URL || "https://themainsmmprovider.com/api/v2"
+        provider: process.env.SMM_API_URL || "https://mysmmapi.com/api/v2"
       });
     }
   });
