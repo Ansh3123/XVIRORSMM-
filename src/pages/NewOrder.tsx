@@ -206,14 +206,27 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
       }
 
       let resData: any = {};
+      let parseFailed = false;
+      let rawText = '';
       try {
-        resData = await apiResponse.json();
+        const cloneRes = apiResponse.clone();
+        rawText = await cloneRes.text();
+        resData = JSON.parse(rawText);
       } catch (e) {
-        // Fallback for parsing
+        parseFailed = true;
       }
 
       if (!apiResponse.ok || resData.error) {
-        const providerError = resData.error || 'API Provider failed to process order';
+        let providerError = '';
+        if (resData.error) {
+          providerError = resData.error;
+        } else if (parseFailed && rawText) {
+          // If response is HTML or text, sanitize it slightly or show first 150 chars
+          const cleanText = rawText.replace(/<[^>]*>/g, '').trim();
+          providerError = `Server responded with status ${apiResponse.status}: ${cleanText.slice(0, 150)}`;
+        } else {
+          providerError = `API Provider failed to process order (Status ${apiResponse.status})`;
+        }
 
         // Safe refund if SMM provider rejects the order
         await runTransaction(db, async (refundTx) => {
