@@ -32,8 +32,8 @@ const DENOMINATIONS = [10, 20, 30, 50, 100, 200, 500, 1000];
 
 export default function AdminRedeemCodes() {
   const { user, userData, loading: authLoading } = useAuth();
-  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
-  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
+  const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(user?.email?.toLowerCase().trim() || '');
+  const isAdmin = userData?.role === 'admin' && isSpecialAdmin;
 
   const { showToast } = useToast();
   const [codes, setCodes] = useState<RedeemCode[]>([]);

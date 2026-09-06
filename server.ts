@@ -32,7 +32,7 @@ async function startServer() {
       }
       const idToken = authHeader.split("Bearer ")[1];
       const decodedToken = await authAdmin.verifyIdToken(idToken);
-      const isSpecialAdmin = decodedToken.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+      const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes((decodedToken.email || '').toLowerCase().trim());
       if (!isSpecialAdmin) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -76,7 +76,7 @@ async function startServer() {
       }
       const idToken = authHeader.split("Bearer ")[1];
       const decodedToken = await authAdmin.verifyIdToken(idToken);
-      const isSpecialAdmin = decodedToken.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+      const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes((decodedToken.email || '').toLowerCase().trim());
       if (!isSpecialAdmin) {
         return res.status(403).json({ error: "Access denied" });
       }

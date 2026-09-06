@@ -19,7 +19,7 @@ import { cn } from '../lib/utils';
 export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; setMobileOpen?: (val: boolean) => void }) {
   const location = useLocation();
   const { user, userData, logout } = useAuth();
-  const isAdmin = userData?.role === 'admin' || user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
+  const isAdmin = userData?.role === 'admin' && ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(user?.email?.toLowerCase().trim() || '');
 
   const userNavigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },

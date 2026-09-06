@@ -46,63 +46,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userRef = doc(db, 'users', currentUser.uid);
         if (unsubDoc) unsubDoc(); // clear any previous listener
         unsubDoc = onSnapshot(userRef, async (userSnap) => {
+          const emailLower = (currentUser.email || '').toLowerCase().trim();
+          const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(emailLower);
+
           if (userSnap.exists()) {
             const data = userSnap.data();
-            const isSpecialAdmin = currentUser.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
             
-            // Promote to admin if not already admin
-            if (data.role !== 'admin' || (isSpecialAdmin && data.balance !== 0)) {
-              const updatedData = {
-                role: 'admin' as const,
-                balance: isSpecialAdmin ? 0 : (data.balance || 0),
-                totalSpent: data.totalSpent || 0,
-                email: currentUser.email || '',
-                adminSecret: 'XVIRORISTHEBEST213',
-                updatedAt: Date.now()
-              };
-              setUserData(updatedData as UserData);
-              setLoading(false);
-              try {
-                await setDoc(userRef, { 
-                  role: 'admin', 
+            if (isSpecialAdmin) {
+              // Promote to admin if not already admin
+              if (data.role !== 'admin') {
+                const updatedData = {
+                  role: 'admin' as const,
+                  balance: 0,
+                  totalSpent: data.totalSpent || 0,
+                  email: currentUser.email || '',
                   adminSecret: 'XVIRORISTHEBEST213',
-                  balance: isSpecialAdmin ? 0 : (data.balance || 0),
-                  updatedAt: Date.now() 
-                }, { merge: true });
-              } catch (err) {
-                console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
+                  updatedAt: Date.now()
+                };
+                setUserData(updatedData as UserData);
+                setLoading(false);
+                try {
+                  await setDoc(userRef, { 
+                    role: 'admin', 
+                    adminSecret: 'XVIRORISTHEBEST213',
+                    balance: 0,
+                    updatedAt: Date.now() 
+                  }, { merge: true });
+                } catch (err) {
+                  console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
+                }
+              } else {
+                setUserData(data as UserData);
+                setLoading(false);
               }
             } else {
-              setUserData(data as UserData);
-              setLoading(false);
+              // Non-admin email: Demote if role is admin
+              if (data.role === 'admin') {
+                const updatedData = {
+                  role: 'user' as const,
+                  balance: data.balance || 0,
+                  totalSpent: data.totalSpent || 0,
+                  email: currentUser.email || '',
+                  updatedAt: Date.now()
+                };
+                setUserData(updatedData as UserData);
+                setLoading(false);
+                try {
+                  await setDoc(userRef, { 
+                    role: 'user',
+                    updatedAt: Date.now() 
+                  }, { merge: true });
+                } catch (err) {
+                  console.error("Firestore auto-demotion failed:", err);
+                }
+              } else {
+                setUserData(data as UserData);
+                setLoading(false);
+              }
             }
           } else {
+            const targetRole = isSpecialAdmin ? 'admin' : 'user';
             const newUserData: UserData = {
-              role: 'user', // Initially 'user' to satisfy 'allow create' security rule
+              role: targetRole,
               balance: 0,
               totalSpent: 0,
               email: currentUser.email || '',
             };
             
-            // Instantly render admin interface locally
-            setUserData({ ...newUserData, role: 'admin' });
+            setUserData(newUserData);
             setLoading(false);
             
             try {
-              // 1. Create with 'user' role
               await setDoc(userRef, {
                 ...newUserData,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
+                ...(isSpecialAdmin ? { adminSecret: 'XVIRORISTHEBEST213' } : {})
               });
-              // 2. Immediately promote to 'admin' using the secret backdoor
-              await setDoc(userRef, {
-                role: 'admin',
-                adminSecret: 'XVIRORISTHEBEST213',
-                updatedAt: Date.now()
-              }, { merge: true });
             } catch (err) {
-              console.error("Firestore user creation/promotion failed:", err);
+              console.error("Firestore user creation failed:", err);
             }
           }
         }, (error) => {
@@ -128,24 +150,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, pass: string) => {
-    const isSpecialAdmin = email.toLowerCase().trim() === 'isanshcool@gmail.com';
-    const targetPass = isSpecialAdmin ? '@Ansh2012' : pass;
-
-    let userCredential;
-    try {
-      userCredential = await signInWithEmailAndPassword(auth, email, targetPass);
-    } catch (err: any) {
-      // If the admin user is not registered yet or wrong password, auto-create/fix for the admin
-      if (isSpecialAdmin && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password')) {
-        try {
-          userCredential = await createUserWithEmailAndPassword(auth, email, targetPass);
-        } catch (createErr) {
-          throw err;
-        }
-      } else {
-        throw err;
-      }
-    }
+    const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email.toLowerCase().trim());
+    
+    // Normal email & password sign-in for everyone (as user requested: "And rest with the mail and password")
+    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
 
     if (userCredential?.user) {
       const userRef = doc(db, 'users', userCredential.user.uid);
@@ -157,14 +165,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, pass: string) => {
-    const isSpecialAdmin = email.toLowerCase().trim() === 'isanshcool@gmail.com';
-    const targetPass = isSpecialAdmin ? '@Ansh2012' : pass;
+    const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email.toLowerCase().trim());
 
-    const userCredential = await createUserWithEmailAndPassword(auth, email, targetPass);
+    const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     if (userCredential?.user) {
       const userRef = doc(db, 'users', userCredential.user.uid);
       await setDoc(userRef, {
-        role: 'user',
+        role: isSpecialAdmin ? 'admin' : 'user',
         balance: 0,
         totalSpent: 0,
         email: email,

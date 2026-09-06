@@ -16,8 +16,8 @@ interface PasswordRequestDoc {
 
 export default function AdminPasswords() {
   const { user, userData, loading: authLoading } = useAuth();
-  const isSpecialAdmin = user?.email?.toLowerCase().trim() === 'isanshcool@gmail.com';
-  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
+  const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(user?.email?.toLowerCase().trim() || '');
+  const isAdmin = userData?.role === 'admin' && isSpecialAdmin;
   
   const [requests, setRequests] = useState<PasswordRequestDoc[]>([]);
   const [loading, setLoading] = useState(true);

@@ -52,51 +52,21 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     if (newClicks >= 4) {
       setClicks(0); // reset
       const enteredEmail = window.prompt('Enter SMM Admin Email:');
-      if (enteredEmail === 'isanshcool@gmail.com') {
+      const emailLower = (enteredEmail || '').toLowerCase().trim();
+      if (['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(emailLower)) {
         const enteredPassword = window.prompt('Enter SMM Admin Password:');
-        if (enteredPassword === '@Ansh2012') {
+        if (enteredPassword) {
           try {
-            let authUser;
-            try {
-              // Sign in with the provided master admin credentials
-              const res = await signInWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2012');
-              authUser = res.user;
-            } catch (err: any) {
-              // If user does not exist in Firebase Auth yet or wrong pass, automatically create or handle it
-              if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-                try {
-                  const res = await createUserWithEmailAndPassword(auth, 'isanshcool@gmail.com', '@Ansh2012');
-                  authUser = res.user;
-                } catch (createErr) {
-                  // Fallback to active current user if creation fails
-                  if (user) {
-                    authUser = user;
-                  }
-                }
-              } else if (user) {
-                authUser = user;
-              }
-            }
-
-            if (authUser) {
-              // Set the user profile to 'admin' in Firestore
-              await setDoc(doc(db, 'users', authUser.uid), {
-                role: 'admin',
-                email: 'isanshcool@gmail.com',
-                balance: 0,
-                totalSpent: 0,
-                updatedAt: Date.now()
-              }, { merge: true });
-
-              alert('Admin credentials verified! Access Granted.');
-              navigate('/admin/deposits');
-              window.location.reload();
-            }
+            await signInWithEmailAndPassword(auth, emailLower, enteredPassword);
+            alert('Admin credentials verified! Access Granted.');
+            navigate('/admin/deposits');
+            window.location.reload();
           } catch (err: any) {
-            console.error('Silent login handle:', err);
-            // Suppress error popups completely per request
+            alert('Invalid Password or Network error: ' + (err.message || err));
           }
         }
+      } else {
+        alert('Access Denied: Unauthorized Admin Email');
       }
     }
   };
