@@ -83,7 +83,7 @@ export default function AdminServices() {
     e.preventDefault();
     try {
       const serviceData = {
-        platform: currentService.platform,
+        
         category: currentService.category,
         name: currentService.name,
         price: Number(currentService.price),
@@ -220,8 +220,8 @@ export default function AdminServices() {
                     services.map((service) => (
                       <tr key={service.id}>
                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{service.id.slice(0, 8)}</td>
-                        <td className="px-3 py-4 text-sm text-gray-900">{service.platform} - {service.name}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">₹{service.price.toFixed(2)}</td>
+                        <td className="px-3 py-4 text-sm text-gray-900">{service.name}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">₹{service.price.toFixed(4)}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm">
                           <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${service.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {service.status}

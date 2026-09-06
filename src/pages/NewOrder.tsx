@@ -9,10 +9,8 @@ import { fetchSMMServices, Service } from '../lib/smm';
 export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   const { user, userData } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
-  const [platforms, setPlatforms] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   
-  const [selectedPlatform, setSelectedPlatform] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [link, setLink] = useState('');
@@ -22,7 +20,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
+  
   const location = useLocation();
 
   useEffect(() => {
@@ -34,27 +32,25 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         } catch (apiErr) {
           console.error('Failed to fetch SMM helper services:', apiErr);
         }
-
-        // For regular users, filter only active services
-        const isAdmin = userData?.role === 'admin';
-        if (!isAdmin) {
-          finalServices = finalServices.filter((s: any) => s.status === 'active');
-        }
-
+        
         setServices(finalServices);
-        const uniquePlatforms = Array.from(new Set(finalServices.map(s => s.platform)));
-        setPlatforms(uniquePlatforms);
-
-        // Pre-select if URL has service
+        
+        // Extract unique categories
+        const uniqueCategories = Array.from(new Set(finalServices.map(s => s.category)));
+        setCategories(uniqueCategories);
+        
+        // Prefill from URL if provided
         const params = new URLSearchParams(location.search);
         const prefillServiceId = params.get('service');
-        if (prefillServiceId) {
-           const srv = finalServices.find(s => s.id === prefillServiceId);
-           if (srv) {
-              setSelectedPlatform(srv.platform);
-           }
-        } else if (uniquePlatforms.length > 0 && !selectedPlatform) {
-           setSelectedPlatform(uniquePlatforms[0]);
+        const srv = finalServices.find(s => s.id === prefillServiceId);
+        
+        if (srv) {
+           setSelectedCategory(srv.category);
+           setSelectedServiceId(srv.id);
+        } else if (uniqueCategories.length > 0) {
+           setSelectedCategory(uniqueCategories[0]);
+           const firstService = finalServices.find(s => s.category === uniqueCategories[0]);
+           if (firstService) setSelectedServiceId(firstService.id);
         }
       } catch (err) {
         console.error("Global fetchServices Error:", err);
@@ -64,30 +60,6 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
     };
     fetchServices();
   }, [location, userData]);
-
-  useEffect(() => {
-    if (selectedPlatform) {
-      const platformServices = services.filter(s => s.platform === selectedPlatform);
-      const uniqueCategories = Array.from(new Set(platformServices.map(s => s.category)));
-      setCategories(uniqueCategories);
-      
-      const params = new URLSearchParams(location.search);
-      const prefillServiceId = params.get('service');
-      const srv = services.find(s => s.id === prefillServiceId);
-      
-      if (srv && srv.platform === selectedPlatform) {
-         setSelectedCategory(srv.category);
-         setSelectedServiceId(srv.id);
-      } else if (uniqueCategories.length > 0) {
-         setSelectedCategory(uniqueCategories[0]);
-         const firstService = platformServices.find(s => s.category === uniqueCategories[0]);
-         if (firstService) setSelectedServiceId(firstService.id);
-      } else {
-         setSelectedCategory('');
-         setSelectedServiceId('');
-      }
-    }
-  }, [selectedPlatform, services, location]);
 
   const selectedService = services.find(s => s.id === selectedServiceId);
   const charge = selectedService && quantity ? (selectedService.price / 1000) * parseInt(quantity) : 0;
@@ -263,19 +235,9 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Platform</label>
-              <select
-                value={selectedPlatform}
-                onChange={(e) => setSelectedPlatform(e.target.value)}
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-              >
-                <option value="">Select Platform</option>
-                {platforms.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
+            
 
-            {selectedPlatform && (
+            {true && (
               <div>
                 <label className="block text-sm font-medium text-gray-700">Category</label>
                 <select
@@ -310,7 +272,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
                 >
                   <option value="">Select Service</option>
                   {services.filter(s => s.category === selectedCategory).map(s => (
-                    <option key={s.id} value={s.id}>{s.name} (₹{s.price} / 1000)</option>
+                    <option key={s.id} value={s.id}>{s.name} (₹{s.price.toFixed(4)} / 1000)</option>
                   ))}
                 </select>
               </div>
@@ -352,7 +314,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
 
             <div className="bg-gray-50 p-4 rounded-md flex justify-between items-center border border-gray-100">
               <span className="text-gray-700 font-medium">Total Charge:</span>
-              <span className="text-2xl font-bold text-gray-900">₹{charge.toFixed(2)}</span>
+              <span className="text-2xl font-bold text-gray-900">₹{charge.toFixed(4)}</span>
             </div>
 
             <button

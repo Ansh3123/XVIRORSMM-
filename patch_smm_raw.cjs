@@ -1,4 +1,6 @@
-import { doc, getDoc } from 'firebase/firestore';
+const fs = require('fs');
+
+const code = `import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 export interface Service {
@@ -36,7 +38,7 @@ function parseSMMResponse(data: any[]): Service[] {
   return data.map((item: any) => ({
     id: String(item.service),
     category: item.category || 'General',
-    name: item.name || `Service ${item.service}`,
+    name: item.name || \`Service \${item.service}\`,
     price: parseFloat(String(item.rate || '0').replace(/,/g, '')),
     minOrder: parseInt(item.min || '10'),
     maxOrder: parseInt(item.max || '10000'),
@@ -44,3 +46,7 @@ function parseSMMResponse(data: any[]): Service[] {
     desc: item.desc || ''
   })).filter(s => s.price > 0);
 }
+`;
+
+fs.writeFileSync('src/lib/smm.ts', code);
+console.log('Patched smm.ts to keep emojis and raw category');

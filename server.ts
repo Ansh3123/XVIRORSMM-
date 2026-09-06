@@ -224,7 +224,8 @@ async function startServer() {
       if (Array.isArray(data)) {
         data = data.map(service => {
           if (service.rate) {
-            service.rate = (parseFloat(service.rate) * 1.40).toFixed(4);
+            const cleanRate = String(service.rate).replace(/,/g, '');
+            service.rate = (parseFloat(cleanRate) * 1.40).toFixed(4);
           }
           return service;
         });
