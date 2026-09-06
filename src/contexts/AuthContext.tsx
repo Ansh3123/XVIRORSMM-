@@ -80,29 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setLoading(false);
               }
             } else {
-              // Non-admin email: Demote if role is admin
-              if (data.role === 'admin') {
-                const updatedData = {
-                  role: 'user' as const,
-                  balance: data.balance || 0,
-                  totalSpent: data.totalSpent || 0,
-                  email: currentUser.email || '',
-                  updatedAt: Date.now()
-                };
-                setUserData(updatedData as UserData);
-                setLoading(false);
-                try {
-                  await setDoc(userRef, { 
-                    role: 'user',
-                    updatedAt: Date.now() 
-                  }, { merge: true });
-                } catch (err) {
-                  console.error("Firestore auto-demotion failed:", err);
-                }
-              } else {
-                setUserData(data as UserData);
-                setLoading(false);
-              }
+              // Non-admin email: Keep whatever role they have in Firestore (manual admin or standard user)
+              setUserData(data as UserData);
+              setLoading(false);
             }
           } else {
             const targetRole = isSpecialAdmin ? 'admin' : 'user';

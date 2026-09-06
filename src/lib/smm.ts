@@ -1,5 +1,8 @@
-const SMM_API_KEY = "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3";
-const SMM_API_URL = "https://mysmmapi.com/api/v2";
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
+
+const DEFAULT_SMM_API_KEY = "2faaf3ae79aa75071f6ac95727f141c0";
+const DEFAULT_SMM_API_URL = "https://smmupi.com/api/v2";
 
 export interface Service {
   id: string;
@@ -12,7 +15,32 @@ export interface Service {
   status?: string;
 }
 
+export async function getClientSmmConfig() {
+  try {
+    const docRef = doc(db, 'settings', 'smm');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (data && data.apiKey && data.apiUrl) {
+        return {
+          apiKey: data.apiKey,
+          apiUrl: data.apiUrl
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Could not fetch SMM settings from firestore, using defaults:", err);
+  }
+  return {
+    apiKey: DEFAULT_SMM_API_KEY,
+    apiUrl: DEFAULT_SMM_API_URL
+  };
+}
+
 export async function fetchSMMServices(): Promise<Service[]> {
+  // Get active config (either from database or requested default)
+  const config = await getClientSmmConfig();
+
   // 1. Try to fetch from the local secure backend API first
   try {
     const res = await fetch('/api/smm/sync', { method: 'POST' });
@@ -42,13 +70,13 @@ export async function fetchSMMServices(): Promise<Service[]> {
 
   // 2. Fallback: Try to fetch directly from SMM provider (in case SMM provider has CORS enabled)
   try {
-    const response = await fetch(SMM_API_URL, {
+    const response = await fetch(config.apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },
       body: new URLSearchParams({
-        key: SMM_API_KEY,
+        key: config.apiKey,
         action: "services"
       })
     });
@@ -64,9 +92,9 @@ export async function fetchSMMServices(): Promise<Service[]> {
 
   // 3. Ultimate Fallback: Fetch via completely free public CORS proxies
   const proxies = [
-    `https://corsproxy.io/?${encodeURIComponent(SMM_API_URL)}`,
-    `https://thingproxy.freeboard.io/fetch/${SMM_API_URL}`,
-    `https://api.allorigins.win/get?url=${encodeURIComponent(SMM_API_URL)}`
+    `https://corsproxy.io/?${encodeURIComponent(config.apiUrl)}`,
+    `https://thingproxy.freeboard.io/fetch/${config.apiUrl}`,
+    `https://api.allorigins.win/get?url=${encodeURIComponent(config.apiUrl)}`
   ];
 
   for (const proxyUrl of proxies) {
@@ -86,7 +114,7 @@ export async function fetchSMMServices(): Promise<Service[]> {
             "Content-Type": "application/x-www-form-urlencoded"
           },
           body: new URLSearchParams({
-            key: SMM_API_KEY,
+            key: config.apiKey,
             action: "services"
           })
         });

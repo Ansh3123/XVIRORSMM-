@@ -464,6 +464,133 @@ function SMTPSettings() {
   );
 }
 
+function SMMSettings() {
+  const [apiKey, setApiKey] = useState('');
+  const [apiUrl, setApiUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    const fetchSmm = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'smm');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setApiKey(data.apiKey || '');
+          setApiUrl(data.apiUrl || '');
+        } else {
+          // Fallback to active requested default credentials
+          setApiKey('2faaf3ae79aa75071f6ac95727f141c0');
+          setApiUrl('https://smmupi.com/api/v2');
+        }
+      } catch (err) {
+        console.error('Error fetching SMM config:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSmm();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const docRef = doc(db, 'settings', 'smm');
+      await setDoc(docRef, {
+        apiKey: apiKey.trim(),
+        apiUrl: apiUrl.trim(),
+        updatedAt: Date.now()
+      });
+      setMessage({ type: 'success', text: 'SMM Provider Gateway Settings updated permanently!' });
+    } catch (err: any) {
+      console.error('Error saving SMM settings:', err);
+      setMessage({ type: 'error', text: 'Failed to save settings: ' + err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center space-x-2 mb-4 border-b border-gray-100 pb-3">
+        <Server className="w-6 h-6 text-blue-600" />
+        <h2 className="text-xl font-bold text-gray-900">SMM Gateway API Credentials</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-6">
+        Configure the active SMM API credentials. Changes made here are saved permanently and are instantly used by the server backend to sync services and route client orders.
+      </p>
+
+      {message && (
+        <div className={`p-4 mb-6 rounded-lg text-sm text-center font-medium ${
+          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">SMM Provider API Key</label>
+            <div className="relative">
+              <Key className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                className="pl-10 relative block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                placeholder="Active SMM provider API Key"
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">SMM Provider API URL</label>
+            <div className="relative">
+              <Server className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                className="pl-10 relative block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
+                placeholder="Active SMM provider API URL (e.g., https://mysmmapi.com/api/v2)"
+                value={apiUrl}
+                onChange={e => setApiUrl(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center justify-center bg-blue-600 text-white font-medium px-5 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving Settings...
+              </>
+            ) : 'Save SMM Configuration'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { user, userData, loading: authLoading } = useAuth();
 
@@ -476,7 +603,7 @@ export default function AdminDashboard() {
   }
 
   const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(user?.email?.toLowerCase().trim() || '');
-  const isAdmin = userData?.role === 'admin' && isSpecialAdmin;
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
 
   if (!isAdmin) {
     return (
@@ -496,8 +623,8 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">Admin Dashboard</h1>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
         {links.map((link) => (
           <Link key={link.name} to={link.href} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
@@ -518,6 +645,11 @@ export default function AdminDashboard() {
       </div>
       
       <EndpointStatus />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <SMMSettings />
+        <SMTPSettings />
+      </div>
     </div>
   );
 }

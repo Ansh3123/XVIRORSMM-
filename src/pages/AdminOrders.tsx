@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 export default function AdminOrders() {
   const { user, userData, loading: authLoading } = useAuth();
   const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(user?.email?.toLowerCase().trim() || '');
-  const isAdmin = userData?.role === 'admin' && isSpecialAdmin;
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -23,7 +23,7 @@ interface RechargeRequest {
 export default function AdminDeposits() {
   const { user, userData, loading: authLoading } = useAuth();
   const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(user?.email?.toLowerCase().trim() || '');
-  const isAdmin = userData?.role === 'admin' && isSpecialAdmin;
+  const isAdmin = userData?.role === 'admin' || isSpecialAdmin;
   const [requests, setRequests] = useState<RechargeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
