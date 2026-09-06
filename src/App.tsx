@@ -1,10 +1,9 @@
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Loader2 } from 'lucide-react';
-import SplashScreen from './components/SplashScreen';
 import FirebaseSyncIndicator from './components/FirebaseSyncIndicator';
 
 // Pre-import core customer pages to render instantly under 3 seconds

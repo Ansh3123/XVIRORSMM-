@@ -18,23 +18,8 @@ const authAdmin = getAuth(firebaseApp);
 const dbAdmin = getFirestore(firebaseApp, "ai-studio-xvirorsmm-89cfb5b2-20c3-4009-9bf0-87f06b86fdc6");
 
 async function getSmmConfig() {
-  try {
-    const configDoc = await dbAdmin.collection("settings").doc("smm").get();
-    if (configDoc.exists) {
-      const data = configDoc.data();
-      if (data && data.apiKey && data.apiUrl) {
-        return {
-          apiKey: String(data.apiKey).trim(),
-          apiUrl: String(data.apiUrl).trim()
-        };
-      }
-    }
-  } catch (err) {
-    console.error("Error reading dynamic SMM config from Firestore settings/smm document:", err);
-  }
-  // Standard Default values requested for now:
   return {
-    apiKey: "2faaf3ae79aa75071f6ac95727f141c0",
+    apiKey: "a6e020a26b2a0a54cf2ec9d35ad096e5",
     apiUrl: "https://smmupi.com/api/v2"
   };
 }
@@ -235,7 +220,16 @@ async function startServer() {
       if (data.error) {
         return res.status(400).json({ error: data.error });
       }
-
+      
+      if (Array.isArray(data)) {
+        data = data.map(service => {
+          if (service.rate) {
+            service.rate = (parseFloat(service.rate) * 1.40).toFixed(4);
+          }
+          return service;
+        });
+      }
+      
       res.json({ success: true, services: data });
     } catch (err) {
       console.error("Sync API Error:", err);
@@ -267,7 +261,7 @@ async function startServer() {
       } catch (fetchErr: any) {
         console.error("SMM Provider Unreachable or Network Error:", fetchErr);
         return res.status(400).json({
-          error: "incorrect service type"
+          error: fetchErr.message || "SMM Provider Unreachable or Network Error"
         });
       }
 
@@ -300,7 +294,7 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error("SMM API Error:", err);
-      res.status(400).json({ error: "incorrect service type" });
+      res.status(400).json({ error: err.message || "Internal Server Error during order placement" });
     }
   });
 
