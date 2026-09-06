@@ -742,8 +742,54 @@ async function startServer() {
     });
   }
 
+  // Database Admin Migration to switch unauthorized admins to users
+  const cleanupAdmins = async () => {
+    try {
+      console.log("[Admin Migration] Scanning for unauthorized admins in Firestore...");
+      const allowedAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
+      
+      const usersRef = dbAdmin.collection("users");
+      const snapshot = await usersRef.where("role", "==", "admin").get();
+      
+      if (snapshot.empty) {
+        console.log("[Admin Migration] No admin users found in database.");
+        return;
+      }
+      
+      const batch = dbAdmin.batch();
+      let count = 0;
+      
+      snapshot.forEach(doc => {
+        const userData = doc.data();
+        const email = (userData.email || "").toLowerCase().trim();
+        
+        if (!allowedAdmins.includes(email)) {
+          console.log(`[Admin Migration] Switching unauthorized admin to user: UID ${doc.id} (${email})`);
+          const docRef = usersRef.doc(doc.id);
+          batch.update(docRef, { 
+            role: "user",
+            adminSecret: null,
+            updatedAt: Date.now() 
+          });
+          count++;
+        }
+      });
+      
+      if (count > 0) {
+        await batch.commit();
+        console.log(`[Admin Migration] Successfully demoted ${count} unauthorized admin(s) to 'user' role.`);
+      } else {
+        console.log("[Admin Migration] All current admins are authorized.");
+      }
+    } catch (err) {
+      console.error("[Admin Migration Error] Failed to run database cleanup:", err);
+    }
+  };
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    // Run the migration as soon as the server listener initializes
+    cleanupAdmins().catch(e => console.error("[Migration Promise Crash]:", e));
   });
 }
 
