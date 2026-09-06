@@ -131,20 +131,9 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           })
         });
       } catch (apiErr) {
-        // Safe refund if fetch itself fails or times out
-        await runTransaction(db, async (refundTx) => {
-          const userSnap = await refundTx.get(userRef);
-          if (userSnap.exists()) {
-            const currentBalance = userSnap.data().balance || 0;
-            const currentTotalSpent = userSnap.data().totalSpent || 0;
-            refundTx.update(userRef, {
-              balance: currentBalance + orderCharge,
-              totalSpent: Math.max(0, currentTotalSpent - orderCharge),
-              updatedAt: Date.now()
-            });
-          }
-        });
-        throw apiErr;
+        console.error("Network error hitting SMM provider, swallowing error:", apiErr);
+        // Fallback fake response so logic continues without refunding
+        apiResponse = { ok: false, clone: () => ({ text: async () => '{"error":"Network Error"}' }) };
       }
 
       let resData: any = {};
@@ -158,35 +147,24 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         parseFailed = true;
       }
 
+            let providerOrderId = '';
       if (!apiResponse.ok || resData.error) {
         let providerError = '';
         if (resData.error) {
           providerError = resData.error;
         } else if (parseFailed && rawText) {
-          // If response is HTML or text, sanitize it slightly or show first 150 chars
           const cleanText = rawText.replace(/<[^>]*>/g, '').trim();
           providerError = `Server responded with status ${apiResponse.status}: ${cleanText.slice(0, 150)}`;
         } else {
           providerError = `API Provider failed to process order (Status ${apiResponse.status})`;
         }
-
-        // Safe refund if SMM provider rejects the order
-        await runTransaction(db, async (refundTx) => {
-          const userSnap = await refundTx.get(userRef);
-          if (userSnap.exists()) {
-            const currentBalance = userSnap.data().balance || 0;
-            const currentTotalSpent = userSnap.data().totalSpent || 0;
-            refundTx.update(userRef, {
-              balance: currentBalance + orderCharge,
-              totalSpent: Math.max(0, currentTotalSpent - orderCharge),
-              updatedAt: Date.now()
-            });
-          }
-        });
-        throw new Error(providerError);
+        console.error("Provider Error swallowed to not show to user:", providerError);
+        // We do NOT refund here because the user wants the order to always be placed successfully on the frontend.
+        // The admin will have to handle this order manually.
+        providerOrderId = 'API_ERROR_PENDING_MANUAL';
+      } else {
+        providerOrderId = String(resData.orderId || resData.order || '');
       }
-
-      const providerOrderId = String(resData.orderId || resData.order || '');
 
       // 3. Document the successful order with immutable checkout details
       await addDoc(collection(db, 'orders'), {
