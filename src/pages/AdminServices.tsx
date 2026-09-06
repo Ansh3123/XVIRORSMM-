@@ -20,41 +20,13 @@ export default function AdminServices() {
     if (!isAdmin) return;
     setLoading(true);
     try {
-      // 1. Fetch from SMM helper (handles backend API, CORS, and static local backups)
-      let loadedServices: Service[] = [];
+      let finalServices: Service[] = [];
       try {
-        loadedServices = await fetchSMMServices();
+        finalServices = await fetchSMMServices();
       } catch (apiErr) {
         console.error('Failed to fetch from SMM helper:', apiErr);
       }
-
-      // 2. Fetch from Firestore (for custom services & admin overrides)
-      let firestoreServices: Service[] = [];
-      try {
-        const q = query(collection(db, 'services'));
-        const querySnapshot = await getDocs(q);
-        firestoreServices = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Service));
-      } catch (fsErr) {
-        console.error('Failed to fetch Firestore services:', fsErr);
-      }
-
-      // 3. Merge SMM helper services and Firestore overrides/custom services
-      const mergedServicesMap: Record<string, Service> = {};
-      loadedServices.forEach((s) => {
-        mergedServicesMap[s.id] = s;
-      });
-
-      firestoreServices.forEach((fsSrv) => {
-        mergedServicesMap[fsSrv.id] = {
-          ...mergedServicesMap[fsSrv.id],
-          ...fsSrv
-        };
-      });
-
-      setServices(Object.values(mergedServicesMap));
+      setServices(finalServices);
     } catch (err) {
       console.error(err);
     } finally {
@@ -105,57 +77,7 @@ export default function AdminServices() {
     }
   };
 
-  const handleSyncAPI = async () => {
-    if (!window.confirm('This will fetch services from the SMM provider API. Proceed?')) return;
-    setIsSyncing(true);
-    try {
-      const res = await fetch('/api/smm/sync', { method: 'POST' });
-      const data = await res.json();
-      
-      if (data.success && data.services) {
-        let count = 0;
-        
-        // Use batch to perform efficient writes, but split into 400 document chunks just in case
-        // The API provides items in array, e.g. { service, name, category, rate, min, max }
-        const chunkSize = 400;
-        for (let i = 0; i < data.services.length; i += chunkSize) {
-          const chunk = data.services.slice(i, i + chunkSize);
-          const batch = writeBatch(db);
-          
-          for (const s of chunk) {
-            const serviceRef = doc(collection(db, 'services'), String(s.service));
-            const platformGuess = s.category ? s.category.trim().split(' ')[0] : 'Other';
-            const originalPrice = parseFloat(s.rate || '0');
-            const markup = originalPrice > 5 ? 4 : 2;
-            const serviceData = {
-              platform: platformGuess,
-              category: s.category || 'Default',
-              name: s.name || `Service ${s.service}`,
-              price: originalPrice + markup,
-              minOrder: parseInt(s.min || '0'),
-              maxOrder: parseInt(s.max || '0'),
-              status: 'active',
-              updatedAt: Date.now()
-            };
-            // Use setDoc via batch (will overwrite existing or create new with fixed ID)
-            batch.set(serviceRef, { ...serviceData, createdAt: Date.now() }, { merge: true });
-            count++;
-          }
-          await batch.commit();
-        }
-        
-        alert(`Successfully synced ${count} services from API!`);
-        fetchServices();
-      } else {
-         alert('Failed to sync API services. Backend returned error.');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Error syncing API services.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,14 +134,7 @@ export default function AdminServices() {
           >
             Broadcast
           </button>
-          <button
-            onClick={handleSyncAPI}
-            disabled={isSyncing}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSyncing ? <Loader2 className="-ml-1 mr-2 h-5 w-5 animate-spin" /> : <DownloadCloud className="-ml-1 mr-2 h-5 w-5 text-gray-500" aria-hidden="true" />}
-            {isSyncing ? 'Syncing API...' : 'Sync API Services'}
-          </button>
+          
           <button
             onClick={() => {
               setCurrentService({ status: 'active' });

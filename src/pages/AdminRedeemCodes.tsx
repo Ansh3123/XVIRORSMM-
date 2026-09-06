@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { FALLBACK_REDEEM_CODES } from '../data/raw_redeem_codes_fallback';
+
 import { 
   Key, 
   Check, 
@@ -74,19 +74,7 @@ export default function AdminRedeemCodes() {
         if (a.amount !== b.amount) return a.amount - b.amount;
         return a.status.localeCompare(b.status);
       });
-
-      if (fetchedCodes.length === 0) {
-        // Fallback to static codes so they are instantly visible and ready to copy
-        const mappedFallback: RedeemCode[] = FALLBACK_REDEEM_CODES.map(c => ({
-          code: c.code,
-          amount: c.amount,
-          status: c.status
-        }));
-        setCodes(mappedFallback);
-      } else {
-        setCodes(fetchedCodes);
-      }
-    } catch (err: any) {
+setCodes(fetchedCodes);    } catch (err: any) {
       console.error('Error fetching redeem codes:', err);
       showToast('error', 'Failed to load redeem codes: ' + err.message);
     } finally {

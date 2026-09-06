@@ -1,4 +1,5 @@
-import { doc, getDoc } from 'firebase/firestore';
+const fs = require('fs');
+const code = `import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 export interface Service {
@@ -39,7 +40,7 @@ function parseSMMResponse(data: any[]): Service[] {
     id: String(item.service),
     platform: determinePlatform(item.category || item.name),
     category: item.category || 'General',
-    name: item.name || `Service ${item.service}`,
+    name: item.name || \`Service \${item.service}\`,
     price: parseFloat(item.rate || '0'),
     minOrder: parseInt(item.min || '10'),
     maxOrder: parseInt(item.max || '10000'),
@@ -58,3 +59,7 @@ function determinePlatform(text: string): string {
   if (t.includes('spotify')) return 'Spotify';
   return 'Other';
 }
+`;
+
+fs.writeFileSync('src/lib/smm.ts', code);
+console.log('Patched smm.ts strictly');

@@ -28,42 +28,12 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        // 1. Fetch SMM services via helper (handles normal API and public CORS proxy fallback)
-        let loadedServices: Service[] = [];
+        let finalServices: Service[] = [];
         try {
-          loadedServices = await fetchSMMServices();
+          finalServices = await fetchSMMServices();
         } catch (apiErr) {
           console.error('Failed to fetch SMM helper services:', apiErr);
         }
-
-        // 2. Fetch from Firestore (for status/custom overrides)
-        let firestoreServices: Service[] = [];
-        try {
-          const servicesRef = collection(db, 'services');
-          const q = query(servicesRef);
-          const querySnapshot = await getDocs(q);
-          firestoreServices = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          } as Service));
-        } catch (fsErr) {
-          console.error('Failed to fetch from Firestore:', fsErr);
-        }
-
-        // 3. Merge SMM API services and Firestore overrides/custom services
-        const mergedServicesMap: Record<string, Service> = {};
-        loadedServices.forEach((s) => {
-          mergedServicesMap[s.id] = s;
-        });
-
-        firestoreServices.forEach((fsSrv) => {
-          mergedServicesMap[fsSrv.id] = {
-            ...mergedServicesMap[fsSrv.id],
-            ...fsSrv
-          };
-        });
-
-        let finalServices = Object.values(mergedServicesMap);
 
         // For regular users, filter only active services
         const isAdmin = userData?.role === 'admin';

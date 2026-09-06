@@ -16,47 +16,15 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        // 1. Fetch from SMM helper (handles API and client fallbacks)
-        let loadedServices: Service[] = [];
+        let finalServices: Service[] = [];
         try {
-          loadedServices = await fetchSMMServices();
+          finalServices = await fetchSMMServices();
         } catch (apiErr) {
           console.error('Failed to fetch from SMM helper:', apiErr);
         }
 
-        // 2. Fetch from Firestore (for overrides / status custom edits / custom services)
-        let firestoreServices: Service[] = [];
-        try {
-          const servicesRef = collection(db, 'services');
-          const q = query(servicesRef);
-          const querySnapshot = await getDocs(q);
-          firestoreServices = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          } as Service));
-        } catch (fsErr) {
-          console.error('Failed to fetch from Firestore:', fsErr);
-        }
-
-        // 3. Merge SMM API services and Firestore overrides/custom services
-        const mergedServicesMap: Record<string, Service> = {};
-        loadedServices.forEach((s) => {
-          mergedServicesMap[s.id] = s;
-        });
-
-        firestoreServices.forEach((fsSrv) => {
-          mergedServicesMap[fsSrv.id] = {
-            ...mergedServicesMap[fsSrv.id],
-            ...fsSrv
-          };
-        });
-
-        let finalServices = Object.values(mergedServicesMap);
-
         // For regular users, filter only active services
-        if (!isAdmin) {
-          finalServices = finalServices.filter(s => s.status === 'active');
-        }
+        
 
         setServices(finalServices);
       } catch (error) {
