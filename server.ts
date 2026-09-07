@@ -196,6 +196,12 @@ async function startServer() {
   // API endpoints
   app.post("/api/smm/sync", async (req, res) => {
     try {
+      const { profitPercentage = 25 } = req.body || {};
+      const profitNum = Number(profitPercentage);
+      if (isNaN(profitNum) || profitNum < 0) {
+        return res.status(400).json({ error: "Invalid profit percentage" });
+      }
+
       const { apiKey, apiUrl } = await getSmmConfig();
 
       const response = await fetch(apiUrl, {
@@ -221,23 +227,87 @@ async function startServer() {
         return res.status(400).json({ error: data.error });
       }
       
-      if (Array.isArray(data)) {
-        data = data.map(service => {
-          if (service.rate) {
-            const cleanRate = String(service.rate).replace(/,/g, '');
-            service.rate = (parseFloat(cleanRate) * 1.40).toFixed(4);
-          }
-          return service;
-        });
+      let totalFetched = 0;
+      let newAdded = 0;
+      let existingUpdated = 0;
+      let skipped = 0;
+      let failed = 0;
+      const processedServices: any[] = [];
 
-        // Services successfully fetched and marked up
-        // (Firestore persistence disabled to ensure zero permission errors)
+      if (Array.isArray(data)) {
+        totalFetched = data.length;
+        for (const item of data) {
+          try {
+            const serviceId = String(item.service || item.id || '');
+            if (!serviceId) {
+              skipped++;
+              continue;
+            }
+            const name = item.name || `Service ${serviceId}`;
+            const category = item.category || 'General';
+            const rateStr = String(item.rate || '0').replace(/,/g, '');
+            const providerCost = parseFloat(rateStr) || 0;
+            const customerPrice = Number((providerCost * (1 + profitNum / 100)).toFixed(4));
+            const minOrder = parseInt(item.min || item.minOrder || '10', 10);
+            const maxOrder = parseInt(item.max || item.maxOrder || '10000', 10);
+            const desc = item.desc || '';
+            const type = item.type || 'Default';
+
+            const serviceRef = dbAdmin.collection('services').doc(serviceId);
+            const docSnap = await serviceRef.get();
+            
+            const serviceData = {
+              id: serviceId,
+              providerServiceId: serviceId,
+              name,
+              category,
+              rate: providerCost.toString(),
+              price: customerPrice,
+              minOrder,
+              maxOrder,
+              status: 'active',
+              desc,
+              type,
+              syncTimestamp: Date.now(),
+              profitPercentage: profitNum,
+              updatedAt: Date.now()
+            };
+
+            if (docSnap.exists) {
+              await serviceRef.update(serviceData);
+              existingUpdated++;
+            } else {
+              await serviceRef.set({
+                ...serviceData,
+                createdAt: Date.now()
+              });
+              newAdded++;
+            }
+            processedServices.push(serviceData);
+          } catch (itemErr) {
+            console.error("Error processing service item:", itemErr);
+            failed++;
+          }
+        }
+      } else {
+        return res.status(400).json({ error: "Provider returned invalid services data format" });
       }
       
-      res.json({ success: true, services: data });
-    } catch (err) {
+      res.json({
+        success: true,
+        summary: {
+          totalFetched,
+          newAdded,
+          existingUpdated,
+          skipped,
+          failed,
+          profitPercentage: profitNum
+        },
+        services: processedServices
+      });
+    } catch (err: any) {
       console.error("Sync API Error:", err);
-      res.status(500).json({ error: "Failed to fetch services from provider" });
+      res.status(500).json({ error: err.message || "Failed to fetch services from provider" });
     }
   });
 
@@ -299,6 +369,39 @@ async function startServer() {
     } catch (err: any) {
       console.error("SMM API Error:", err);
       res.status(400).json({ error: err.message || "Internal Server Error during order placement" });
+    }
+  });
+
+  app.post("/api/smm/status", async (req, res) => {
+    try {
+      const { order } = req.body;
+      const { apiKey, apiUrl } = await getSmmConfig();
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ key: apiKey, action: "status", order: String(order) })
+      });
+      const text = await response.text();
+      const data = JSON.parse(text);
+      res.json(data);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Failed to check order status" });
+    }
+  });
+
+  app.post("/api/smm/balance", async (req, res) => {
+    try {
+      const { apiKey, apiUrl } = await getSmmConfig();
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ key: apiKey, action: "balance" })
+      });
+      const text = await response.text();
+      const data = JSON.parse(text);
+      res.json(data);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Failed to check balance" });
     }
   });
 

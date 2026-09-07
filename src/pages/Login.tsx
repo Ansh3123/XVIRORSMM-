@@ -59,6 +59,12 @@ export default function Login() {
     if (isSigningIn) return;
     setError('');
     setSuccessMessage('');
+
+    if (isRegistering && password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
     setIsSigningIn(true);
     try {
       if (isRegistering) {
@@ -198,8 +204,9 @@ export default function Login() {
                 <input
                   type="password"
                   required
+                  minLength={6}
                   className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-gray-900 focus:outline-none focus:ring-gray-900 sm:text-sm"
-                  placeholder="Password"
+                  placeholder="Password (min 6 characters)"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                 />

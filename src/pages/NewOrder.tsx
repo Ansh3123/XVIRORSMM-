@@ -33,23 +33,25 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           console.error('Failed to fetch SMM helper services:', apiErr);
         }
         
-        setServices(finalServices);
+        // Filter out inactive services for customer views
+        const activeServices = finalServices.filter(s => s.status !== 'inactive');
+        setServices(activeServices);
         
         // Extract unique categories
-        const uniqueCategories = Array.from(new Set(finalServices.map(s => s.category)));
+        const uniqueCategories = Array.from(new Set(activeServices.map(s => s.category)));
         setCategories(uniqueCategories);
         
         // Prefill from URL if provided
         const params = new URLSearchParams(location.search);
         const prefillServiceId = params.get('service');
-        const srv = finalServices.find(s => s.id === prefillServiceId);
+        const srv = activeServices.find(s => s.id === prefillServiceId);
         
         if (srv) {
            setSelectedCategory(srv.category);
            setSelectedServiceId(srv.id);
         } else if (uniqueCategories.length > 0) {
            setSelectedCategory(uniqueCategories[0]);
-           const firstService = finalServices.find(s => s.category === uniqueCategories[0]);
+           const firstService = activeServices.find(s => s.category === uniqueCategories[0]);
            if (firstService) setSelectedServiceId(firstService.id);
         }
       } catch (err) {
@@ -94,9 +96,55 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
     setSuccess('');
 
     try {
+      // 1. Call the provider API first before debiting or creating order
+      let apiResponse;
+      try {
+        apiResponse = await fetch('/api/smm/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service: checkoutServiceId,
+            link,
+            quantity: qty
+          })
+        });
+      } catch (apiErr: any) {
+        console.error("Network error hitting SMM provider:", apiErr);
+        setError(`Order Failed\nReason: Network error connecting to SMM provider (${apiErr.message || 'Unreachable'})`);
+        setSubmitting(false);
+        return;
+      }
+
+      let resData: any = {};
+      let parseFailed = false;
+      let rawText = '';
+      try {
+        rawText = await apiResponse.text();
+        resData = JSON.parse(rawText);
+      } catch (e) {
+        parseFailed = true;
+      }
+
+      if (!apiResponse.ok || resData.error) {
+        let providerError = '';
+        if (resData.error) {
+          providerError = resData.error;
+        } else if (parseFailed && rawText) {
+          const cleanText = rawText.replace(/<[^>]*>/g, '').trim();
+          providerError = cleanText.slice(0, 150) || `Server responded with status ${apiResponse.status}`;
+        } else {
+          providerError = `Provider rejected order (Status ${apiResponse.status})`;
+        }
+        console.error("Provider Order Rejection:", providerError);
+        setError(`Order Failed\nReason: ${providerError}`);
+        setSubmitting(false);
+        return;
+      }
+
+      const providerOrderId = String(resData.orderId || resData.order || '');
       const userRef = doc(db, 'users', user.uid);
-      
-      // 1. Transactionally lock and deduct the balance
+
+      // 2. Transactionally lock and deduct the balance upon provider confirmation
       await runTransaction(db, async (transaction) => {
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists()) {
@@ -110,61 +158,12 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           throw new Error("Insufficient balance. Please add funds to your wallet.");
         }
         
-        // Deduct balance and increment totalSpent atomically
         transaction.update(userRef, {
           balance: currentBalance - orderCharge,
           totalSpent: currentTotalSpent + orderCharge,
           updatedAt: Date.now()
         });
       });
-
-      // 2. Call the provider API
-      let apiResponse;
-      try {
-        apiResponse = await fetch('/api/smm/order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service: checkoutServiceId,
-            link,
-            quantity: qty
-          })
-        });
-      } catch (apiErr) {
-        console.error("Network error hitting SMM provider, swallowing error:", apiErr);
-        // Fallback fake response so logic continues without refunding
-        apiResponse = { ok: false, clone: () => ({ text: async () => '{"error":"Network Error"}' }) };
-      }
-
-      let resData: any = {};
-      let parseFailed = false;
-      let rawText = '';
-      try {
-        const cloneRes = apiResponse.clone();
-        rawText = await cloneRes.text();
-        resData = JSON.parse(rawText);
-      } catch (e) {
-        parseFailed = true;
-      }
-
-            let providerOrderId = '';
-      if (!apiResponse.ok || resData.error) {
-        let providerError = '';
-        if (resData.error) {
-          providerError = resData.error;
-        } else if (parseFailed && rawText) {
-          const cleanText = rawText.replace(/<[^>]*>/g, '').trim();
-          providerError = `Server responded with status ${apiResponse.status}: ${cleanText.slice(0, 150)}`;
-        } else {
-          providerError = `API Provider failed to process order (Status ${apiResponse.status})`;
-        }
-        console.error("Provider Error swallowed to not show to user:", providerError);
-        // We do NOT refund here because the user wants the order to always be placed successfully on the frontend.
-        // The admin will have to handle this order manually.
-        providerOrderId = 'API_ERROR_PENDING_MANUAL';
-      } else {
-        providerOrderId = String(resData.orderId || resData.order || '');
-      }
 
       // 3. Document the successful order with immutable checkout details
       await addDoc(collection(db, 'orders'), {
@@ -185,7 +184,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
       setQuantity('');
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to place order with provider. Please try again.');
+      setError(err.message || 'Failed to place order. Please try again.');
     } finally {
       setSubmitting(false);
     }

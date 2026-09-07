@@ -121,22 +121,60 @@ export default function AdminServices() {
     }
   };
 
-  const handleSync = async () => {
-    setIsSyncing(true);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncStep, setSyncStep] = useState<'input' | 'confirm' | 'syncing' | 'success' | 'error'>('input');
+  const [profitPercentage, setProfitPercentage] = useState('20');
+  const [syncSummary, setSyncSummary] = useState<any>(null);
+  const [syncErrorMessage, setSyncErrorMessage] = useState('');
+  const [syncProgressMessage, setSyncProgressMessage] = useState('Fetching services…');
+
+  const startSyncFlow = () => {
+    setProfitPercentage('20');
+    setSyncStep('input');
+    setSyncModalOpen(true);
+  };
+
+  const handleProceedToConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    const profitNum = parseFloat(profitPercentage);
+    if (isNaN(profitNum) || profitNum < 0) {
+      alert('Please enter a valid non-negative profit percentage.');
+      return;
+    }
+    setSyncStep('confirm');
+  };
+
+  const handleStartSync = async () => {
+    const profitNum = parseFloat(profitPercentage);
+    setSyncStep('syncing');
+    setSyncProgressMessage('Fetching services…');
+
     try {
-      const res = await fetch('/api/smm/sync', { method: 'POST' });
+      const timer1 = setTimeout(() => setSyncProgressMessage('Processing services…'), 800);
+      const timer2 = setTimeout(() => setSyncProgressMessage('Saving services…'), 1600);
+
+      const res = await fetch('/api/smm/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profitPercentage: profitNum })
+      });
+
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+
       const data = await res.json();
-      if (data.success && Array.isArray(data.services)) {
-        alert(`Successfully synced ${data.services.length} services from provider API and URL!`);
+      if (res.ok && data.success) {
+        setSyncSummary(data.summary);
+        setSyncStep('success');
         fetchServices();
       } else {
-        alert('Failed to sync services from provider API.');
+        setSyncErrorMessage(data.error || 'Failed to sync services from provider API.');
+        setSyncStep('error');
       }
     } catch (err: any) {
       console.error(err);
-      alert('Error syncing services: ' + err.message);
-    } finally {
-      setIsSyncing(false);
+      setSyncErrorMessage(err.message || 'Error syncing services.');
+      setSyncStep('error');
     }
   };
 
@@ -148,12 +186,12 @@ export default function AdminServices() {
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
           <button
-            onClick={handleSync}
+            onClick={startSyncFlow}
             disabled={isSyncing}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
           >
-            {isSyncing ? <Loader2 className="-ml-1 mr-2 h-5 w-5 animate-spin" /> : <DownloadCloud className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />}
-            Sync Services
+            <DownloadCloud className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
+            SMM Provider Services Sync
           </button>
 
           <button
@@ -175,6 +213,143 @@ export default function AdminServices() {
           </button>
         </div>
       </div>
+
+      {syncModalOpen && (
+        <div className="fixed z-50 inset-0 overflow-y-auto bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-xl border border-gray-100">
+            {syncStep === 'input' && (
+              <form onSubmit={handleProceedToConfirm}>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">SMM Provider Services Sync</h3>
+                <p className="text-sm text-gray-600 mb-4">Enter profit percentage to calculate customer-facing selling prices from provider costs.</p>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Enter Profit Percentage</label>
+                  <div className="relative rounded-md shadow-sm">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      required
+                      value={profitPercentage}
+                      onChange={(e) => setProfitPercentage(e.target.value)}
+                      className="block w-full pr-12 border border-gray-300 rounded-md py-2 px-3 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="e.g. 20"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-500 sm:text-sm">%</div>
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setSyncModalOpen(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {syncStep === 'confirm' && (
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm SMM Sync</h3>
+                <p className="text-sm text-gray-700 mb-6 bg-yellow-50 p-4 rounded-md border border-yellow-200">
+                  Sync all services from the configured SMM provider with a <span className="font-bold text-gray-900">{profitPercentage}%</span> profit margin?
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setSyncModalOpen(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartSync}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700"
+                  >
+                    Start Sync
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {syncStep === 'syncing' && (
+              <div className="py-8 text-center space-y-4">
+                <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto" />
+                <h4 className="text-lg font-medium text-gray-900">Synchronizing Services</h4>
+                <p className="text-sm text-gray-500">{syncProgressMessage}</p>
+              </div>
+            )}
+
+            {syncStep === 'success' && syncSummary && (
+              <div>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">✓</div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Sync Completed Successfully</h3>
+                    <p className="text-xs text-gray-500">Provider services fetched & permanently saved to database.</p>
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm text-gray-700 mb-6 border border-gray-200">
+                  <div className="flex justify-between"><span>Total Services Fetched:</span><span className="font-semibold">{syncSummary.totalFetched}</span></div>
+                  <div className="flex justify-between"><span>New Services Added:</span><span className="font-semibold text-green-600">{syncSummary.newAdded}</span></div>
+                  <div className="flex justify-between"><span>Existing Services Updated:</span><span className="font-semibold text-blue-600">{syncSummary.existingUpdated}</span></div>
+                  <div className="flex justify-between"><span>Services Skipped:</span><span className="font-semibold text-gray-500">{syncSummary.skipped}</span></div>
+                  <div className="flex justify-between"><span>Services Failed:</span><span className="font-semibold text-red-600">{syncSummary.failed}</span></div>
+                  <div className="flex justify-between border-t border-gray-200 pt-2 font-medium"><span>Profit Percentage Used:</span><span>{syncSummary.profitPercentage}%</span></div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSyncModalOpen(false)}
+                    className="px-5 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {syncStep === 'error' && (
+              <div>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600 font-bold">✕</div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Service Sync Failed</h3>
+                    <p className="text-xs text-gray-500">Could not complete synchronization with provider.</p>
+                  </div>
+                </div>
+                <div className="bg-red-50 text-red-800 p-4 rounded-md text-sm mb-6 border border-red-200">
+                  <span className="font-medium">Reason: </span>{syncErrorMessage}
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setSyncStep('input')}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Try Again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncModalOpen(false)}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {isEditing && (
         <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-6 mb-8">
