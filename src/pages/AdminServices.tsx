@@ -162,13 +162,20 @@ export default function AdminServices() {
       clearTimeout(timer1);
       clearTimeout(timer2);
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        throw new Error(`Server returned non-JSON response (Status ${res.status}): ${responseText.slice(0, 150) || 'Empty response'}`);
+      }
+
       if (res.ok && data.success) {
         setSyncSummary(data.summary);
         setSyncStep('success');
         fetchServices();
       } else {
-        setSyncErrorMessage(data.error || 'Failed to sync services from provider API.');
+        setSyncErrorMessage(data.error || `Failed to sync services (Status ${res.status})`);
         setSyncStep('error');
       }
     } catch (err: any) {

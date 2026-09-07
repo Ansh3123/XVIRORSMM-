@@ -215,12 +215,16 @@ async function startServer() {
         })
       });
       const responseText = await response.text();
+      if (!responseText || !responseText.trim()) {
+        return res.status(502).json({ error: "SMM provider API returned an empty response. Please check API URL and credentials." });
+      }
       let data: any;
       try {
         data = JSON.parse(responseText);
       } catch (parseErr) {
         console.error("Invalid sync JSON response:", responseText.slice(0, 500));
-        return res.status(500).json({ error: "Invalid response format from provider API" });
+        const cleanText = responseText.replace(/<[^>]*>/g, '').trim();
+        return res.status(502).json({ error: `SMM provider API returned non-JSON response: ${cleanText.slice(0, 150) || 'Unknown format'}` });
       }
 
       if (data.error) {
