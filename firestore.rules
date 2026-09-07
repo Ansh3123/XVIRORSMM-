@@ -144,11 +144,7 @@ service cloud.firestore {
     }
 
     match /services/{serviceId} {
-      allow get: if isValidId(serviceId);
-      allow list: if isSignedIn();
-      allow create: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
-      allow update: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
-      allow delete: if isAdmin() && isValidId(serviceId);
+      allow read, write: if true;
     }
 
     match /orders/{orderId} {

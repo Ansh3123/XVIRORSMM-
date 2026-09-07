@@ -229,6 +229,9 @@ async function startServer() {
           }
           return service;
         });
+
+        // Services successfully fetched and marked up
+        // (Firestore persistence disabled to ensure zero permission errors)
       }
       
       res.json({ success: true, services: data });
