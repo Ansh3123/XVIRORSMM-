@@ -17,15 +17,28 @@ export async function fetchSMMServices(): Promise<Service[]> {
     const res = await fetch('/api/smm/sync', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
-      if (data.success && data.services) {
-        return parseSMMResponse(data.services);
+      if (data.success && data.services && Array.isArray(data.services) && data.services.length > 0) {
+        const parsed = parseSMMResponse(data.services);
+        try {
+          localStorage.setItem('smm_cached_services', JSON.stringify(parsed));
+        } catch (e) {}
+        return parsed;
       }
-    } else {
-      console.error("Backend SMM sync returned non-OK status");
     }
   } catch (err) {
     console.error("Backend SMM sync failed to fetch:", err);
   }
+
+  // Fallback to localStorage cache if API is offline
+  try {
+    const cached = localStorage.getItem('smm_cached_services');
+    if (cached) {
+      const parsedCache = JSON.parse(cached);
+      if (Array.isArray(parsedCache) && parsedCache.length > 0) {
+        return parsedCache;
+      }
+    }
+  } catch (e) {}
 
   return [];
 }
