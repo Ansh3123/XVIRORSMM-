@@ -121,6 +121,25 @@ export default function AdminServices() {
     }
   };
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/smm/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.services)) {
+        alert(`Successfully synced ${data.services.length} services from provider API and URL!`);
+        fetchServices();
+      } else {
+        alert('Failed to sync services from provider API.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Error syncing services: ' + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="sm:flex sm:items-center sm:justify-between mb-8">
@@ -128,6 +147,15 @@ export default function AdminServices() {
           <h1 className="text-2xl font-bold text-gray-900">Manage Services</h1>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+          >
+            {isSyncing ? <Loader2 className="-ml-1 mr-2 h-5 w-5 animate-spin" /> : <DownloadCloud className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />}
+            Sync Services
+          </button>
+
           <button
             onClick={handleBroadcast}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
