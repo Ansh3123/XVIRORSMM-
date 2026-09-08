@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, getDocs, query, doc, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { fetchSMMServices, Service } from '../lib/smm';
+import { fetchSMMServices, Service, APP_PLATFORMS, getAppForService } from '../lib/smm';
 
 export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   const { user, userData } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   
+  const [selectedApp, setSelectedApp] = useState('All Apps');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [link, setLink] = useState('');
@@ -23,45 +24,69 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   
   const location = useLocation();
 
-  useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        let finalServices: Service[] = [];
-        try {
-          finalServices = await fetchSMMServices();
-        } catch (apiErr) {
-          console.error('Failed to fetch SMM helper services:', apiErr);
-        }
-        
-        // Filter out inactive services for customer views
-        const activeServices = finalServices.filter(s => s.status !== 'inactive');
-        setServices(activeServices);
-        
-        // Extract unique categories
-        const uniqueCategories = Array.from(new Set(activeServices.map(s => s.category)));
-        setCategories(uniqueCategories);
-        
-        // Prefill from URL if provided
-        const params = new URLSearchParams(location.search);
-        const prefillServiceId = params.get('service');
-        const srv = activeServices.find(s => s.id === prefillServiceId);
-        
-        if (srv) {
-           setSelectedCategory(srv.category);
-           setSelectedServiceId(srv.id);
-        } else if (uniqueCategories.length > 0) {
-           setSelectedCategory(uniqueCategories[0]);
-           const firstService = activeServices.find(s => s.category === uniqueCategories[0]);
-           if (firstService) setSelectedServiceId(firstService.id);
-        }
-      } catch (err) {
-        console.error("Global fetchServices Error:", err);
-      } finally {
-        setLoading(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadServices = async (force = false) => {
+    try {
+      if (force) setRefreshing(true);
+      else setLoading(true);
+
+      const finalServices = await fetchSMMServices(force);
+      const activeServices = finalServices.filter(s => s.status !== 'inactive');
+      setServices(activeServices);
+      
+      const uniqueCategories = Array.from(new Set(activeServices.map(s => s.category)));
+      setCategories(uniqueCategories);
+      
+      const params = new URLSearchParams(location.search);
+      const prefillServiceId = params.get('service');
+      const srv = activeServices.find(s => s.id === prefillServiceId);
+      
+      if (srv) {
+        const appName = getAppForService(srv);
+        setSelectedApp(appName);
+        setSelectedCategory(srv.category);
+        setSelectedServiceId(srv.id);
+      } else if (!selectedCategory && uniqueCategories.length > 0) {
+        setSelectedApp('All Apps');
+        setSelectedCategory(uniqueCategories[0]);
+        const firstService = activeServices.find(s => s.category === uniqueCategories[0]);
+        if (firstService) setSelectedServiceId(firstService.id);
       }
-    };
-    fetchServices();
-  }, [location, userData]);
+    } catch (err) {
+      console.error("Global fetchServices Error:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadServices();
+  }, [location]);
+
+  const availableApps = React.useMemo(() => {
+    const appsSet = new Set<string>(APP_PLATFORMS);
+    services.forEach(s => appsSet.add(getAppForService(s)));
+    return Array.from(appsSet);
+  }, [services]);
+
+  const filteredCategories = React.useMemo(() => {
+    if (selectedApp === 'All Apps') {
+      return categories;
+    }
+    return Array.from(new Set(
+      services.filter(s => getAppForService(s) === selectedApp).map(s => s.category)
+    ));
+  }, [services, selectedApp, categories]);
+
+  const filteredServices = React.useMemo(() => {
+    return services.filter(s => {
+      const matchApp = selectedApp === 'All Apps' || getAppForService(s) === selectedApp;
+      const matchCat = !selectedCategory || s.category === selectedCategory;
+      return matchApp && matchCat;
+    });
+  }, [services, selectedApp, selectedCategory]);
 
   const selectedService = services.find(s => s.id === selectedServiceId);
   const charge = selectedService && quantity ? (selectedService.price / 1000) * parseInt(quantity) : 0;
@@ -210,52 +235,92 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         {error && <div className="p-4 mb-6 rounded-md bg-red-50 text-red-800 text-sm">{error}</div>}
         {success && <div className="p-4 mb-6 rounded-md bg-green-50 text-green-800 text-sm">{success}</div>}
 
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-6 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+          <div className="flex items-center space-x-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            <span className="font-semibold text-gray-900">{services.length} Live Services Loaded</span>
+            <span>•</span>
+            <span>{filteredServices.length} services in {selectedApp}</span>
+          </div>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => loadServices(true)}
+            className="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition-colors disabled:opacity-50"
+          >
+            {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            <span>{refreshing ? 'Syncing...' : 'Sync with API'}</span>
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="space-y-6">
-            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select App / Platform</label>
+              <select
+                value={selectedApp}
+                onChange={(e) => {
+                  const newApp = e.target.value;
+                  setSelectedApp(newApp);
+                  const cats = newApp === 'All Apps' 
+                    ? categories
+                    : Array.from(new Set(services.filter(s => getAppForService(s) === newApp).map(s => s.category)));
+                  
+                  const nextCat = cats.length > 0 ? cats[0] : '';
+                  setSelectedCategory(nextCat);
+                  const firstSrv = services.find(s => (newApp === 'All Apps' || getAppForService(s) === newApp) && (!nextCat || s.category === nextCat));
+                  setSelectedServiceId(firstSrv ? firstSrv.id : '');
+                }}
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              >
+                <option value="All Apps">All Apps / Platforms</option>
+                {availableApps.map(app => <option key={app} value={app}>{app}</option>)}
+              </select>
+            </div>
 
-            {true && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => {
-                    const newCat = e.target.value;
-                    setSelectedCategory(newCat);
-                    const firstSrv = services.find(s => s.category === newCat);
-                    if (firstSrv) {
-                       setSelectedServiceId(firstSrv.id);
-                    } else {
-                       setSelectedServiceId('');
-                    }
-                  }}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                >
-                  <option value="">Select Category</option>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  const newCat = e.target.value;
+                  setSelectedCategory(newCat);
+                  const firstSrv = services.find(s => (selectedApp === 'All Apps' || getAppForService(s) === selectedApp) && s.category === newCat);
+                  if (firstSrv) {
+                     setSelectedServiceId(firstSrv.id);
+                  } else {
+                     setSelectedServiceId('');
+                  }
+                }}
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              >
+                <option value="">Select Category</option>
+                {filteredCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="space-y-6">
             {selectedCategory ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Service</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
                 <select
                   value={selectedServiceId}
                   onChange={(e) => setSelectedServiceId(e.target.value)}
                   className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                 >
                   <option value="">Select Service</option>
-                  {services.filter(s => s.category === selectedCategory).map(s => (
+                  {filteredServices.map(s => (
                     <option key={s.id} value={s.id}>{s.name} (₹{s.price.toFixed(4)} / 1000)</option>
                   ))}
                 </select>
               </div>
             ) : (
               <div className="h-full flex items-center justify-center border-2 border-dashed border-gray-200 rounded-md p-6 text-gray-400 text-sm">
-                Select a platform and category first
+                Select an app and category first
               </div>
             )}
           </div>

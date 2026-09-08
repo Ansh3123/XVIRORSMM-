@@ -26,7 +26,7 @@ export interface Service {
 }
 
 // Curated default services list with 1.25 rate markup
-const CURATED_SERVICES: Service[] = [
+export const CURATED_SERVICES: Service[] = [
   { id: "6131", category: "IG Followers", name: "𝐈𝐆 𝐅𝐨𝐥𝐥𝐨𝐰𝐞𝐫𝐬 100% 𝐎𝐥𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭+ 15 𝐏𝐨𝐬𝐭 ( 𝐍𝐨𝐧 - 𝐃𝐫𝐨𝐩 ) ( 𝐔𝐩𝐝𝐚𝐭𝐞𝐝 𝐨𝐧 25/1/2026 ) 6131 𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦 𝐅𝐨𝐥𝐥𝐨𝐰𝐞𝐫𝐬 𝐑𝐞𝐚𝐥 & 𝐁𝐨𝐭 [ 𝐌𝐚𝐱 50𝐊 ] 50𝐊/𝐃𝐚𝐲 | 𝐍𝐨 𝐑𝐞𝐟𝐢𝐥𝐥 ⚠️ 𝐈𝐧𝐬𝐭𝐚𝐧𝐭 𝐒𝐭𝐚𝐫𝐭 ⚡ 𝐂𝐡𝐞𝐚𝐩𝐞𝐬𝐭 𝐈𝐧 𝐓𝐡𝐞 𝐰𝐨𝐫𝐥𝐝 🌍", price: 32 * 1.25, minOrder: 100, maxOrder: 10000000, status: 'active', rate: "32" },
   { id: "98", category: "IG Followers", name: "𝗜𝗚 𝗙𝗼𝗹𝗹𝗼𝘄𝗲𝗿𝘀 100% 𝗢𝗹𝗱 𝗔𝗰𝗰𝗼𝘂𝗻𝘁𝘀 𝗪𝗶𝘁𝗵 15 𝗣𝗼𝘀𝘁'𝘀 [ 𝗡𝗼𝗻-𝗗𝗿𝗼𝗽 ] 𝗨𝗟𝗧𝗥𝗔 𝗙𝗔𝗦𝗧 300𝗞/500𝗸 𝗗𝗮𝘆𝘀 | 𝗡𝗼-𝗥𝗲𝗳𝗶𝗹𝗹 ⚠️ | 𝗔𝗹𝗹 𝗧𝘆𝗽𝗲𝘀 𝗙𝗹𝗮𝗴 ⭐⭐⭐", price: 98 * 1.25, minOrder: 10, maxOrder: 10000000, status: 'active', rate: "98" },
   { id: "4980", category: "IG Followers", name: "𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦 𝐟𝐨𝐥𝐥𝐨𝐰𝐞𝐫𝐬 100% 𝐎𝐥𝐝 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 𝐖𝐢𝐭𝐡 8+ 𝐏𝐨𝐬𝐭'𝐬 [ 𝐍𝐨𝐧-𝐃𝐫𝐨𝐩 ] 500𝐊/𝐃𝐚𝐲 | 365 𝐃𝐚𝐲'𝐬 𝐑𝐄𝐅𝐈𝐋𝐋 ♻️ ( 𝐀𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐎𝐧𝐥𝐲 𝐨𝐧 𝐓𝐌𝐒 ) 💖", price: 125 * 1.25, minOrder: 10, maxOrder: 500000, status: 'active', rate: "125" },
@@ -117,12 +117,75 @@ const CURATED_SERVICES: Service[] = [
   { id: "4278", category: "IG Reels Views [ Cheap ]", name: "𝗜𝗻𝘀𝘁𝐚𝗴𝗿𝐚𝗺 𝗥𝗲𝗲𝗹𝘀 𝗩𝗶𝗲𝘄𝘀 | 𝗔𝗹𝗹 𝗟𝗶𝗻𝗸 | 100𝗞/𝗗𝗮𝘆 | 𝗜𝗻𝘀𝘁𝗮𝗻𝘁 🚀", price: 0.19 * 1.25, minOrder: 100, maxOrder: 1000000, status: 'active', rate: "0.19" },
   { id: "4383", category: "IG Reels Views [ Cheap ]", name: "𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦 𝐑𝐞𝐞𝐥𝐬 𝐕𝐢𝐞𝐰𝐬 𝐒𝐮𝐩𝐞𝐫𝐟𝐚𝐬𝐭 | 𝐀𝐥𝐥 𝐋𝐢𝐧𝐤 | 𝐃𝐚𝐲 200𝐊 🚀🚀🚀", price: 0.18 * 1.25, minOrder: 100, maxOrder: 1000000, status: 'active', rate: "0.18" },
   { id: "4148", category: "IG Reels Views [ Cheap ]", name: "𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦 𝐑𝐞𝐞𝐥𝐬 𝐕𝐢𝐞𝐰𝐬 [ 𝐍𝐨𝐧-𝐃𝐫𝐨𝐩 ] 300𝐤/500𝐤 𝐏𝐞𝐫 𝐇𝐨𝐮𝐫 | 𝐄𝐦𝐞𝐫𝐠𝐞𝐧𝐜𝐲 𝐔𝐩𝐝𝐚𝐭𝐞 ☠️ | 𝐋𝐢𝐟𝐞𝐭𝐢𝐦𝐞 𝐑𝐞𝐟𝐢𝐥𝐥 ♻️ | 𝐎𝐧𝐞 𝐜𝐥𝐢𝐜𝐤 𝐃𝐨𝐧𝐞 ✅", price: 0.349 * 1.25, minOrder: 100, maxOrder: 7000000, status: 'active', rate: "0.349" },
+  // Multi-Platform Curated Services
+  { id: "8001", category: "Spotify Plays & Followers", name: "Spotify Track Plays [Global / USA HQ Streams] - Non-Drop | 10K/Day | Lifetime Guarantee", price: 1.50 * 1.25, minOrder: 100, maxOrder: 1000000, status: 'active', rate: "1.50" },
+  { id: "8002", category: "Spotify Plays & Followers", name: "Spotify Artist & Playlist Followers [Worldwide Verified Streams] - High Retention ♻️", price: 2.20 * 1.25, minOrder: 100, maxOrder: 500000, status: 'active', rate: "2.20" },
+  { id: "8010", category: "Discord Members", name: "Discord Server Members [Offline / Realistic Accounts] - Instant Start ⚡", price: 3.50 * 1.25, minOrder: 50, maxOrder: 50000, status: 'active', rate: "3.50" },
+  { id: "8011", category: "Discord Members", name: "Discord Online Server Members [Voice & Chat Active] - 30 Days Refill ♻️", price: 7.80 * 1.25, minOrder: 50, maxOrder: 20000, status: 'active', rate: "7.80" },
+  { id: "8020", category: "Twitch Followers & Views", name: "Twitch Channel Followers [High Quality Real Looking] - Instant Start 🚀", price: 1.80 * 1.25, minOrder: 50, maxOrder: 100000, status: 'active', rate: "1.80" },
+  { id: "8021", category: "Twitch Followers & Views", name: "Twitch Live Stream Viewers [60 Minutes Duration] - Stable Non-Drop ⚡", price: 4.50 * 1.25, minOrder: 20, maxOrder: 5000, status: 'active', rate: "4.50" },
+  { id: "8030", category: "LinkedIn Connections & Followers", name: "LinkedIn Company Page Followers [Real Professional Profiles] - Non-Drop ♻️", price: 12.00 * 1.25, minOrder: 50, maxOrder: 25000, status: 'active', rate: "12.00" },
+  { id: "8031", category: "LinkedIn Connections & Followers", name: "LinkedIn Profile Connections & Endorsements [HQ Accounts] - Safe Delivery", price: 15.00 * 1.25, minOrder: 25, maxOrder: 10000, status: 'active', rate: "15.00" },
+  { id: "8040", category: "Pinterest Followers & Repins", name: "Pinterest Board Followers & Repins [Organic Looking Engagement] 📌", price: 2.40 * 1.25, minOrder: 100, maxOrder: 50000, status: 'active', rate: "2.40" },
+  { id: "8050", category: "Snapchat Followers & Story Views", name: "Snapchat Spotlight & Story Views [Global High Retention] 👻", price: 1.90 * 1.25, minOrder: 100, maxOrder: 200000, status: 'active', rate: "1.90" },
+  { id: "8060", category: "Reddit Upvotes & Members", name: "Reddit Post Upvotes [Safe & Organic Algorithm Boost] ⬆️", price: 14.50 * 1.25, minOrder: 20, maxOrder: 5000, status: 'active', rate: "14.50" },
+  { id: "8070", category: "SoundCloud Plays & Followers", name: "SoundCloud Track Plays [Worldwide HQ Listeners] - Ultra Fast 🎵", price: 0.90 * 1.25, minOrder: 500, maxOrder: 2000000, status: 'active', rate: "0.90" },
+  { id: "8080", category: "Vimeo Video Views", name: "Vimeo High Retention Video Views [Direct & Embed Views] - Lifetime ♻️", price: 1.20 * 1.25, minOrder: 100, maxOrder: 500000, status: 'active', rate: "1.20" }
 ];
+
+export const APP_PLATFORMS = [
+  'All Apps',
+  'Instagram',
+  'Facebook',
+  'YouTube',
+  'Telegram',
+  'Twitter / X',
+  'TikTok',
+  'Spotify',
+  'Discord',
+  'Twitch',
+  'LinkedIn',
+  'Pinterest',
+  'Snapchat',
+  'Reddit',
+  'WhatsApp',
+  'Google Maps',
+  'Vimeo',
+  'SoundCloud',
+  'Other Apps'
+] as const;
+
+export function getAppForService(service: Service | { category?: string; name?: string }): string {
+  const raw = ((service.category || '') + ' ' + (service.name || ''));
+  const norm = raw.normalize('NFKD').toLowerCase();
+
+  if (norm.includes('instagram') || norm.includes('ig ') || norm.includes('ig-') || norm.includes('reels') || norm.includes('insta')) return 'Instagram';
+  if (norm.includes('facebook') || norm.includes('fb ') || norm.includes('fb-')) return 'Facebook';
+  if (norm.includes('youtube') || norm.includes('yt ') || norm.includes('yt-') || norm.includes('subscriber')) return 'YouTube';
+  if (norm.includes('telegram') || norm.includes('tg ') || norm.includes('tg-')) return 'Telegram';
+  if (norm.includes('tiktok') || norm.includes('tik tok')) return 'TikTok';
+  if (norm.includes('twitter') || norm.includes('tweet') || norm.includes(' x ') || norm.includes('x.com')) return 'Twitter / X';
+  if (norm.includes('spotify')) return 'Spotify';
+  if (norm.includes('discord')) return 'Discord';
+  if (norm.includes('twitch')) return 'Twitch';
+  if (norm.includes('linkedin')) return 'LinkedIn';
+  if (norm.includes('pinterest')) return 'Pinterest';
+  if (norm.includes('snapchat') || norm.includes('snap ')) return 'Snapchat';
+  if (norm.includes('reddit')) return 'Reddit';
+  if (norm.includes('whatsapp')) return 'WhatsApp';
+  if (norm.includes('google') || norm.includes('review') || norm.includes('gmaps')) return 'Google Maps';
+  if (norm.includes('vimeo')) return 'Vimeo';
+  if (norm.includes('soundcloud')) return 'SoundCloud';
+  if (norm.includes('threads')) return 'Instagram';
+  return 'Other Apps';
+}
+
+let memoryCachedServices: Service[] | null = null;
 
 export async function callSmmApi(action: string, additionalParams: Record<string, any> = {}): Promise<any> {
   try {
     if (action === 'services') {
-      const res = await fetch('/api/smm/sync', { method: 'POST' });
+      const res = await fetch('/api/smm/services');
       const data = await res.json();
       if (data.services && Array.isArray(data.services) && data.services.length > 0) {
         return data.services;
@@ -155,7 +218,7 @@ export async function callSmmApi(action: string, additionalParams: Record<string
     }
     return CURATED_SERVICES;
   } catch (err: any) {
-    console.error(`[SMM API Error] Action '${action}' failed, falling back to curated list:`, err);
+    console.error(`[SMM API Error] Action '${action}' failed:`, err);
     if (action === 'services') return CURATED_SERVICES;
     throw err;
   }
@@ -163,93 +226,67 @@ export async function callSmmApi(action: string, additionalParams: Record<string
 
 export async function syncAndCacheServicesFromProvider(): Promise<Service[]> {
   try {
-    const rawData = await callSmmApi('services');
-    let services: Service[] = [];
-    if (Array.isArray(rawData) && rawData.length > 0) {
-      services = rawData.map((item: any) => ({
-        id: String(item.service || item.id),
-        category: item.category || 'General',
-        name: item.name || `Service ${item.service}`,
-        price: item.price !== undefined ? Number(item.price) : (parseFloat(String(item.rate || '0').replace(/,/g, '')) * 1.25), // 1.25 increased rate markup
-        minOrder: parseInt(item.min || item.minOrder || '10'),
-        maxOrder: parseInt(item.max || item.maxOrder || '10000'),
-        status: item.status || 'active',
-        desc: item.desc || '',
-        type: item.type || 'Default',
-        rate: String(item.rate || '0')
-      })).filter(s => s.price > 0);
-    }
-
-    if (services.length === 0) {
-      services = CURATED_SERVICES;
-    }
-
-    // Cache services in Firestore collection 'services'
-    try {
-      for (const s of services) {
-        const sRef = doc(db, 'services', s.id);
-        await setDoc(sRef, {
-          id: s.id,
-          category: s.category,
-          name: s.name,
-          price: s.price,
-          minOrder: s.minOrder,
-          maxOrder: s.maxOrder,
-          status: s.status,
-          desc: s.desc,
-          type: s.type,
-          rate: s.rate,
-          updatedAt: Date.now()
-        }, { merge: true });
+    const res = await fetch('/api/smm/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profitPercentage: 25 })
+    });
+    const data = await res.json();
+    if (data.services && Array.isArray(data.services) && data.services.length > 0) {
+      memoryCachedServices = data.services;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('smm_services_cache', JSON.stringify(data.services));
+        } catch (e) {}
       }
-    } catch (firestoreErr) {
-      console.error("Firestore caching error:", firestoreErr);
+      return data.services;
     }
-
-    return services;
   } catch (err) {
     console.error("Failed to sync services from provider:", err);
-    return CURATED_SERVICES;
   }
+  return await fetchSMMServices(true);
 }
 
-export async function getCachedServicesFromFirestore(): Promise<Service[]> {
-  try {
-    const snap = await getDocs(collection(db, 'services'));
-    if (!snap.empty) {
-      const list: Service[] = [];
-      snap.forEach(docSnap => {
-        const data = docSnap.data();
-        list.push({
-          id: String(data.id || docSnap.id),
-          category: data.category || 'General',
-          name: data.name || 'Service',
-          price: Number(data.price || 0),
-          minOrder: Number(data.minOrder || 10),
-          maxOrder: Number(data.maxOrder || 10000),
-          status: data.status || 'active',
-          desc: data.desc || '',
-          type: data.type || 'Default',
-          rate: data.rate || '0'
-        });
-      });
-      if (list.length > 0) {
-        // Merge or ensure curated services are included
-        return list;
+export async function fetchSMMServices(forceRefresh = false): Promise<Service[]> {
+  if (!forceRefresh && memoryCachedServices && memoryCachedServices.length > 0) {
+    return memoryCachedServices;
+  }
+
+  // Instant local cache resolution
+  if (!forceRefresh && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('smm_services_cache');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 50) {
+          memoryCachedServices = parsed;
+          // Background refresh to stay in sync
+          setTimeout(() => {
+            fetchSMMServices(true).catch(() => {});
+          }, 1500);
+          return parsed;
+        }
       }
+    } catch (e) {}
+  }
+
+  try {
+    const url = '/api/smm/services' + (forceRefresh ? '?refresh=true' : '');
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.services && Array.isArray(data.services) && data.services.length > 0) {
+      memoryCachedServices = data.services;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('smm_services_cache', JSON.stringify(data.services));
+        } catch (e) {}
+      }
+      return data.services;
     }
   } catch (err) {
-    console.error("Failed to read cached services from Firestore:", err);
+    console.error("fetchSMMServices error:", err);
   }
 
-  return await syncAndCacheServicesFromProvider();
-}
-
-export async function fetchSMMServices(): Promise<Service[]> {
-  const cached = await getCachedServicesFromFirestore();
-  if (cached && cached.length > 0) {
-    return cached;
-  }
   return CURATED_SERVICES;
 }
 
