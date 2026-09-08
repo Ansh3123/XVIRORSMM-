@@ -317,7 +317,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
               <Search className="w-3.5 h-3.5 text-blue-600" />
-              Quick Find Any Service (by Provider ID or Name)
+              Search Service by Name
             </label>
             <span className="text-[11px] font-semibold text-blue-700">
               {services.length} Total Services Live
@@ -331,18 +331,13 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
               onChange={(e) => {
                 const val = e.target.value;
                 setSearchQuery(val);
-                if (val.trim().length > 0) {
+                if (val.trim().length > 1) {
                   const queryLower = val.trim().toLowerCase();
-                  // Check exact ID match first
-                  const exactIdMatch = services.find(s => s.id === val.trim() || String(s.rate) === val.trim());
-                  if (exactIdMatch) {
-                    setSelectedApp(getAppForService(exactIdMatch));
-                    setSelectedCategory(exactIdMatch.category);
-                    setSelectedServiceId(exactIdMatch.id);
-                    return;
-                  }
-                  // Check name match
-                  const nameMatch = services.find(s => s.name.toLowerCase().includes(queryLower) || s.category.toLowerCase().includes(queryLower));
+                  // Search primarily by service name
+                  const nameMatch = services.find(s => 
+                    s.name.toLowerCase().includes(queryLower) || 
+                    s.category.toLowerCase().includes(queryLower)
+                  );
                   if (nameMatch) {
                     setSelectedApp(getAppForService(nameMatch));
                     setSelectedCategory(nameMatch.category);
@@ -350,7 +345,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
                   }
                 }
               }}
-              placeholder="Search provider ID (e.g. 6093, 6133, 6131) or name (e.g. followers, reels, likes)..."
+              placeholder="Search service by name (e.g. Followers, Likes, Views, Comments, Subscribers)..."
               className="block w-full pl-9 pr-24 py-2 text-sm bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
             />
             {searchQuery && (
@@ -367,11 +362,10 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
             <div className="mt-2 max-h-48 overflow-y-auto bg-white border border-blue-200 rounded-lg shadow-sm divide-y divide-gray-100">
               {services
                 .filter(s => 
-                  s.id.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
                   s.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
                   s.category.toLowerCase().includes(searchQuery.trim().toLowerCase())
                 )
-                .slice(0, 10)
+                .slice(0, 15)
                 .map(s => (
                   <div
                     key={s.id}
@@ -387,9 +381,6 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-[10px]">
-                          #{s.id}
-                        </span>
                         <span className="font-semibold text-gray-900 truncate">{s.name}</span>
                       </div>
                       <p className="text-[11px] text-gray-500 truncate mt-0.5">{s.category}</p>

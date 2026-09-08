@@ -172,39 +172,54 @@ export function getAppForService(service: Service | { category?: string; name?: 
 
 let memoryCachedServices: Service[] | null = null;
 
+async function parseResponseSafely(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.warn(`[Safe JSON Parse Failed] Response:`, text.slice(0, 150));
+    if (text.includes("<") || text.includes("<!DOCTYPE") || text.includes("<html")) {
+      return { error: `Server returned non-JSON/HTML page (Status ${res.status}).` };
+    }
+    return { error: `Invalid response format (Status ${res.status}): ${text.slice(0, 100)}` };
+  }
+}
+
 export async function callSmmApi(action: string, additionalParams: Record<string, any> = {}): Promise<any> {
   try {
     if (action === 'services') {
-      const res = await fetch('/api/smm/services');
-      const data = await res.json();
+      const res = await fetch('/api/smm/services', { credentials: 'include' });
+      const data = await parseResponseSafely(res);
       if (data.services && Array.isArray(data.services) && data.services.length > 0) {
         return data.services;
       }
       return CURATED_SERVICES;
     }
     if (action === 'balance') {
-      const res = await fetch('/api/smm/balance', { method: 'POST' });
-      return await res.json();
+      const res = await fetch('/api/smm/balance', { method: 'POST', credentials: 'include' });
+      return await parseResponseSafely(res);
     }
     if (action === 'status') {
       const res = await fetch('/api/smm/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ order: additionalParams.order })
       });
-      return await res.json();
+      return await parseResponseSafely(res);
     }
     if (action === 'add') {
       const res = await fetch('/api/smm/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           service: additionalParams.service,
           link: additionalParams.link,
           quantity: additionalParams.quantity
         })
       });
-      return await res.json();
+      return await parseResponseSafely(res);
     }
     return CURATED_SERVICES;
   } catch (err: any) {
@@ -219,9 +234,10 @@ export async function syncAndCacheServicesFromProvider(): Promise<Service[]> {
     const res = await fetch('/api/smm/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ profitPercentage: 25 })
     });
-    const data = await res.json();
+    const data = await parseResponseSafely(res);
     if (data.services && Array.isArray(data.services) && data.services.length > 0) {
       memoryCachedServices = data.services;
       if (typeof window !== 'undefined') {
@@ -263,7 +279,7 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
   try {
     const url = '/api/smm/services' + (forceRefresh ? '?refresh=true' : '');
     const res = await fetch(url, { credentials: 'include' });
-    const data = await res.json();
+    const data = await parseResponseSafely(res);
     if (data.services && Array.isArray(data.services) && data.services.length > 0) {
       memoryCachedServices = data.services;
       if (typeof window !== 'undefined') {
