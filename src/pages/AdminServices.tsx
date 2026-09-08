@@ -433,7 +433,9 @@ export default function AdminServices() {
                   ) : (
                     services.map((service) => (
                       <tr key={service.id}>
-                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{service.id.slice(0, 8)}</td>
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                          <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">#{service.id}</span>
+                        </td>
                         <td className="px-3 py-4 text-sm text-gray-900">{service.name}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">₹{service.price.toFixed(4)}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm">

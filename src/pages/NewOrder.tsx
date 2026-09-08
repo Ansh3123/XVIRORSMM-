@@ -246,8 +246,31 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           </div>
         </div>
 
-        {error && <div className="p-4 mb-6 rounded-md bg-red-50 text-red-800 text-sm">{error}</div>}
-        {success && <div className="p-4 mb-6 rounded-md bg-green-50 text-green-800 text-sm">{success}</div>}
+        {error && (
+          <div className="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-900 text-sm">
+            <div className="flex items-start">
+              <span className="text-lg mr-2">❌</span>
+              <div className="flex-1">
+                <p className="font-bold text-red-950">Order Execution Failed</p>
+                <p className="whitespace-pre-line mt-1 font-medium">{error}</p>
+                <p className="mt-2 text-xs text-red-700">
+                  🛡️ <strong>Wallet Protected:</strong> No balance was deducted. Your funds remain securely stored in your wallet database.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        {success && (
+          <div className="p-4 mb-6 rounded-lg bg-green-50 border border-green-200 text-green-900 text-sm">
+            <div className="flex items-start">
+              <span className="text-lg mr-2">✅</span>
+              <div className="flex-1">
+                <p className="font-bold text-green-950">Order Placed Successfully!</p>
+                <p className="whitespace-pre-line mt-1">{success}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 mb-6 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
           <div className="flex items-center space-x-2">
@@ -320,7 +343,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           <div className="space-y-6">
             {selectedCategory ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service (with Provider Service ID)</label>
                 <select
                   value={selectedServiceId}
                   onChange={(e) => setSelectedServiceId(e.target.value)}
@@ -328,7 +351,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
                 >
                   <option value="">Select Service</option>
                   {filteredServices.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} (₹{s.price.toFixed(4)} / 1000)</option>
+                    <option key={s.id} value={s.id}>[#{s.id}] {s.name} (₹{s.price.toFixed(2)} / 1000)</option>
                   ))}
                 </select>
               </div>
@@ -342,6 +365,21 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
 
         {selectedService && (
           <div className="border-t border-gray-200 pt-6 space-y-6">
+            <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-200/80 flex flex-wrap items-center gap-2 text-xs">
+              <span className="px-2.5 py-1 bg-blue-600 text-white font-bold rounded">
+                Provider ID #{selectedService.id}
+              </span>
+              <span className="px-2 py-0.5 bg-white text-gray-700 rounded border border-gray-200">
+                Min: {selectedService.minOrder.toLocaleString()}
+              </span>
+              <span className="px-2 py-0.5 bg-white text-gray-700 rounded border border-gray-200">
+                Max: {selectedService.maxOrder.toLocaleString()}
+              </span>
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-semibold rounded">
+                Rate: ₹{selectedService.price.toFixed(2)} per 1,000
+              </span>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Link / URL</label>
               <input
@@ -368,9 +406,15 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
               <p className="mt-1 text-xs text-gray-500">Min: {selectedService.minOrder} - Max: {selectedService.maxOrder}</p>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-md flex justify-between items-center border border-gray-100">
-              <span className="text-gray-700 font-medium">Total Charge:</span>
-              <span className="text-2xl font-bold text-gray-900">₹{charge.toFixed(4)}</span>
+            <div className="bg-gray-50 p-4 rounded-lg flex flex-wrap justify-between items-center border border-gray-200 gap-2">
+              <div>
+                <span className="text-gray-500 text-xs block font-medium">Your Stored Balance</span>
+                <span className="text-xl font-bold text-emerald-600">₹{(userData?.balance || 0).toFixed(2)}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-gray-500 text-xs block font-medium">Total Order Cost</span>
+                <span className="text-2xl font-black text-gray-900">₹{charge.toFixed(2)}</span>
+              </div>
             </div>
 
             <button
@@ -378,7 +422,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
               disabled={submitting}
               className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              {submitting ? 'Processing via API...' : 'Submit Order'}
+              {submitting ? 'Connecting to SMM Provider...' : 'Submit Order'}
             </button>
           </div>
         )}

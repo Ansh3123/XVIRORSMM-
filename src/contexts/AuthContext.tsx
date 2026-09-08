@@ -53,11 +53,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const data = userSnap.data();
             
             if (isSpecialAdmin) {
-              // Promote to admin if not already admin
+              // Promote to admin if not already admin, strictly preserving any deposited balance
+              const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
               if (data.role !== 'admin') {
                 const updatedData = {
                   role: 'admin' as const,
-                  balance: 0,
+                  balance: preservedBalance,
                   totalSpent: data.totalSpent || 0,
                   email: currentUser.email || '',
                   adminSecret: 'XVIRORISTHEBEST213',
@@ -69,19 +70,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   await setDoc(userRef, { 
                     role: 'admin', 
                     adminSecret: 'XVIRORISTHEBEST213',
-                    balance: 0,
+                    balance: preservedBalance,
                     updatedAt: Date.now() 
                   }, { merge: true });
                 } catch (err) {
                   console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
                 }
               } else {
-                setUserData(data as UserData);
+                setUserData({
+                  ...data,
+                  balance: preservedBalance,
+                  totalSpent: data.totalSpent || 0
+                } as UserData);
                 setLoading(false);
               }
             } else {
-              // Non-admin email: Keep whatever role they have in Firestore (manual admin or standard user)
-              setUserData(data as UserData);
+              // Non-admin email: Keep whatever role and balance they have in Firestore
+              const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
+              setUserData({
+                ...data,
+                balance: preservedBalance,
+                totalSpent: data.totalSpent || 0
+              } as UserData);
               setLoading(false);
             }
           } else {

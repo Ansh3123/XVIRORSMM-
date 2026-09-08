@@ -44,6 +44,8 @@ service cloud.firestore {
         && data.quantity is number && data.quantity >= 1
         && data.charge is number && data.charge >= 0
         && data.status is string && data.status.size() <= 50
+        && (!('serviceName' in data.keys()) || (data.serviceName is string && data.serviceName.size() <= 2000))
+        && (!('providerOrderId' in data.keys()) || (data.providerOrderId is string && data.providerOrderId.size() <= 128))
         && data.createdAt is number
         && data.updatedAt is number;
     }
@@ -59,6 +61,8 @@ service cloud.firestore {
         && (!('rejectReason' in data.keys()) || (data.rejectReason is string && data.rejectReason.size() <= 1000))
         && (!('userEmail' in data.keys()) || (data.userEmail is string && data.userEmail.size() <= 255))
         && (!('utr' in data.keys()) || (data.utr is string && data.utr.size() <= 50))
+        && (!('serviceName' in data.keys()) || (data.serviceName is string && data.serviceName.size() <= 2000))
+        && (!('orderId' in data.keys()) || (data.orderId is string && data.orderId.size() <= 128))
         && (!('verifiedAt' in data.keys()) || data.verifiedAt is number)
         && (!('verificationTime' in data.keys()) || data.verificationTime is number);
     }
