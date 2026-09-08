@@ -248,7 +248,7 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
       const stored = localStorage.getItem('smm_services_cache');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 50) {
+        if (Array.isArray(parsed) && parsed.length >= 800) {
           memoryCachedServices = parsed;
           // Background refresh to stay in sync
           setTimeout(() => {
@@ -262,7 +262,7 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
 
   try {
     const url = '/api/smm/services' + (forceRefresh ? '?refresh=true' : '');
-    const res = await fetch(url);
+    const res = await fetch(url, { credentials: 'include' });
     const data = await res.json();
     if (data.services && Array.isArray(data.services) && data.services.length > 0) {
       memoryCachedServices = data.services;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, addDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, Search, CheckCircle2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { fetchSMMServices, Service, APP_PLATFORMS, getAppForService } from '../lib/smm';
 
@@ -14,6 +14,7 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
   const [selectedApp, setSelectedApp] = useState('All Apps');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [link, setLink] = useState('');
   const [quantity, setQuantity] = useState('');
   
@@ -127,12 +128,31 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         apiResponse = await fetch('/api/smm/order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             service: checkoutServiceId,
             link,
             quantity: qty
           })
         });
+
+        // If an intermediate proxy returns 405, retry with alternative route
+        if (apiResponse.status === 405) {
+          try {
+            apiResponse = await fetch('/api/smm/order/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                service: checkoutServiceId,
+                link,
+                quantity: qty
+              })
+            });
+          } catch (retryErr) {
+            console.warn("Retry failed:", retryErr);
+          }
+        }
       } catch (apiErr: any) {
         console.error("Network error hitting SMM provider:", apiErr);
         setError(`Order Failed\nReason: Network error connecting to SMM provider (${apiErr.message || 'Unreachable'})`);
@@ -291,6 +311,97 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
             {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             <span>{refreshing ? 'Syncing...' : 'Sync with API'}</span>
           </button>
+        </div>
+
+        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-blue-600" />
+              Quick Find Any Service (by Provider ID or Name)
+            </label>
+            <span className="text-[11px] font-semibold text-blue-700">
+              {services.length} Total Services Live
+            </span>
+          </div>
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                if (val.trim().length > 0) {
+                  const queryLower = val.trim().toLowerCase();
+                  // Check exact ID match first
+                  const exactIdMatch = services.find(s => s.id === val.trim() || String(s.rate) === val.trim());
+                  if (exactIdMatch) {
+                    setSelectedApp(getAppForService(exactIdMatch));
+                    setSelectedCategory(exactIdMatch.category);
+                    setSelectedServiceId(exactIdMatch.id);
+                    return;
+                  }
+                  // Check name match
+                  const nameMatch = services.find(s => s.name.toLowerCase().includes(queryLower) || s.category.toLowerCase().includes(queryLower));
+                  if (nameMatch) {
+                    setSelectedApp(getAppForService(nameMatch));
+                    setSelectedCategory(nameMatch.category);
+                    setSelectedServiceId(nameMatch.id);
+                  }
+                }
+              }}
+              placeholder="Search provider ID (e.g. 6093, 6133, 6131) or name (e.g. followers, reels, likes)..."
+              className="block w-full pl-9 pr-24 py-2 text-sm bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-2.5 text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded bg-gray-100"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {searchQuery.trim().length > 1 && (
+            <div className="mt-2 max-h-48 overflow-y-auto bg-white border border-blue-200 rounded-lg shadow-sm divide-y divide-gray-100">
+              {services
+                .filter(s => 
+                  s.id.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+                  s.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+                  s.category.toLowerCase().includes(searchQuery.trim().toLowerCase())
+                )
+                .slice(0, 10)
+                .map(s => (
+                  <div
+                    key={s.id}
+                    onClick={() => {
+                      setSelectedApp(getAppForService(s));
+                      setSelectedCategory(s.category);
+                      setSelectedServiceId(s.id);
+                      setSearchQuery('');
+                    }}
+                    className={`p-2.5 text-xs hover:bg-blue-50 cursor-pointer flex items-center justify-between gap-2 transition-colors ${
+                      selectedServiceId === s.id ? 'bg-blue-50/80 font-medium' : ''
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-[10px]">
+                          #{s.id}
+                        </span>
+                        <span className="font-semibold text-gray-900 truncate">{s.name}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 truncate mt-0.5">{s.category}</p>
+                    </div>
+                    <div className="text-right whitespace-nowrap pl-2">
+                      <span className="font-bold text-emerald-600">₹{s.price.toFixed(2)}</span>
+                      <span className="text-[10px] text-gray-400 block">/ 1k</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
