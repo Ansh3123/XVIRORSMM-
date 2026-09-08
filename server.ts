@@ -456,6 +456,53 @@ async function startServer() {
     return processedServices;
   }
 
+  // Test connection endpoint for SMM provider
+  app.get("/api/smm/test-connection", async (req, res) => {
+    try {
+      const { apiKey, apiUrl } = await getSmmConfig();
+      console.log(`[SMM Test Connection] Testing URL: ${apiUrl} with key: ${apiKey.slice(0, 6)}...`);
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "application/json"
+        },
+        body: new URLSearchParams({ key: apiKey, action: "services" }),
+        signal: AbortSignal.timeout(30000)
+      });
+      const status = response.status;
+      const responseText = await response.text();
+      console.log(`[SMM Test Connection] Status: ${status}, Length: ${responseText.length}`);
+      
+      if (!response.ok || responseText.trim().startsWith("<") || responseText.includes("<!DOCTYPE")) {
+        return res.status(200).json({
+          success: false,
+          status,
+          apiUrl,
+          error: `Provider returned HTML/Error status ${status}`,
+          rawPreview: responseText.slice(0, 300)
+        });
+      }
+
+      const json = JSON.parse(responseText);
+      const count = Array.isArray(json) ? json.length : 0;
+      return res.json({
+        success: true,
+        status,
+        apiUrl,
+        servicesCount: count,
+        message: `Successfully connected to SMM provider! Loaded ${count} services.`
+      });
+    } catch (err: any) {
+      console.error("[SMM Test Connection Error]:", err);
+      return res.status(200).json({
+        success: false,
+        error: err.message || "Test connection failed"
+      });
+    }
+  });
+
   // API endpoints to fetch services
   app.get("/api/smm/services", async (req, res) => {
     try {
