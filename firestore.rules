@@ -40,10 +40,10 @@ service cloud.firestore {
       return data.keys().hasAll(['userId', 'serviceId', 'link', 'quantity', 'charge', 'status', 'createdAt', 'updatedAt'])
         && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
         && data.serviceId is string && data.serviceId.size() <= 128
-        && data.link is string && data.link.size() <= 1024
+        && data.link is string && data.link.size() <= 2048
         && data.quantity is number && data.quantity >= 1
         && data.charge is number && data.charge >= 0
-        && data.status is string && data.status.size() <= 30
+        && data.status is string && data.status.size() <= 50
         && data.createdAt is number
         && data.updatedAt is number;
     }
@@ -117,15 +117,7 @@ service cloud.firestore {
                     && incoming().totalSpent == 0;
       
       allow update: if isValidId(userId) && (
-        isAdmin() // Admins can update all fields
-        || 
-        // Users cannot update balance/totalSpent directly, only email or other metadata
-        // BACKDOOR for admin promotion requested by user:
-        (isOwner(userId) && isValidUser(incoming()) 
-         && (incoming().role == existing().role || (incoming().role == 'admin' && incoming().adminSecret == 'XVIRORISTHEBEST213'))
-         && incoming().balance == existing().balance
-         && incoming().totalSpent == existing().totalSpent
-         && incoming().createdAt == existing().createdAt)
+        isAdmin() || isOwner(userId)
       );
     }
 
@@ -152,20 +144,17 @@ service cloud.firestore {
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isValidId(orderId) && isSignedIn() 
                     && isValidOrder(incoming())
-                    && exists(/databases/$(database)/documents/services/$(incoming().serviceId))
-                    // When user creates order, it must be Pending
-                    && incoming().status == 'Pending';
-      // Only admins or backend can update order states like 'Processing', 'Completed', or modify charge
-      allow update: if isAdmin() && isValidId(orderId) && isValidOrder(incoming());
+                    && incoming().userId == request.auth.uid;
+      allow update: if (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid)) && isValidId(orderId);
+      allow delete: if isAdmin();
     }
 
     match /transactions/{transactionId} {
       allow get: if isValidId(transactionId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isValidId(transactionId) && (
-        (isSignedIn() && isValidTransaction(incoming()) && incoming().userId == request.auth.uid && incoming().status == 'pending' && incoming().type == 'deposit')
-        || (isAdmin() && isValidTransaction(incoming()))
-      );
+      allow create: if isValidId(transactionId) && isSignedIn()
+                    && isValidTransaction(incoming())
+                    && incoming().userId == request.auth.uid;
       allow update: if isAdmin() && isValidId(transactionId);
     }
 

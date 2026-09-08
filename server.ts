@@ -478,10 +478,57 @@ async function startServer() {
     }
   });
 
+  async function resolveProviderServiceId(serviceId: string | number): Promise<string> {
+    const strId = String(serviceId || '').trim();
+    if (!strId) return strId;
+
+    const numId = parseInt(strId, 10);
+    // If it is already a known provider service ID below 7000, use directly
+    if (numId < 7000 && !isNaN(numId)) {
+      return strId;
+    }
+
+    // Map curated IDs to real active provider services
+    if (numId >= 7000) {
+      // Instagram Followers (7001..7003)
+      if (numId === 7003) return "6134"; // Indian Followers
+      if (numId >= 7001 && numId <= 7003) return "6133"; // HQ Followers
+      // Instagram Likes (7004..7006)
+      if (numId >= 7004 && numId <= 7006) return "6093"; // Likes
+      // Instagram Reels Views (7007..7008)
+      if (numId >= 7007 && numId <= 7008) return "4278"; // Reels Views
+      // Instagram Comments (7009)
+      if (numId === 7009) return "5974"; // Comments
+      // Instagram Story Views (7010)
+      if (numId === 7010) return "5951"; // Story Views
+      // YouTube Subscribers (7011..7013)
+      if (numId >= 7011 && numId <= 7013) return "5573"; // YouTube Subs
+      // YouTube Views (7014..7015)
+      if (numId >= 7014 && numId <= 7015) return "5573";
+      // Facebook Followers / Page Likes (7020..7023)
+      if (numId >= 7020 && numId <= 7023) return "5780"; // FB Followers
+      // Facebook Likes (7024)
+      if (numId === 7024) return "5826"; // FB Likes
+      // Telegram Members (7025..7027)
+      if (numId >= 7025 && numId <= 7027) return "5510"; // TG Members
+      // TikTok Likes (7030..7032)
+      if (numId >= 7030 && numId <= 7032) return "4225"; // TikTok Likes
+      // Twitter Views (7034..7036)
+      if (numId >= 7034 && numId <= 7036) return "4443"; // Twitter Views
+    }
+
+    return strId;
+  }
+
   app.post("/api/smm/order", async (req, res) => {
     try {
       const { service, link, quantity } = req.body;
+      if (!service || !link || !quantity) {
+        return res.status(400).json({ error: "Missing required fields (service, link, quantity)", success: false });
+      }
+
       const { apiKey, apiUrl } = await getSmmConfig();
+      const resolvedServiceId = await resolveProviderServiceId(service);
 
       let responseText = "";
       try {
@@ -493,20 +540,18 @@ async function startServer() {
           body: new URLSearchParams({
             key: apiKey,
             action: "add",
-            service: String(service),
-            link: String(link),
+            service: resolvedServiceId,
+            link: String(link).trim(),
             quantity: String(quantity)
           }),
-          signal: AbortSignal.timeout(4000)
+          signal: AbortSignal.timeout(15000)
         });
         responseText = await response.text();
       } catch (fetchErr: any) {
-        console.warn("SMM Provider Unreachable during order placement, generating successful order dispatch fallback:", fetchErr);
-        const fallbackOrderNum = Math.floor(100000 + Math.random() * 900000);
-        return res.json({
-          order: fallbackOrderNum,
-          success: true,
-          orderId: String(fallbackOrderNum)
+        console.warn("SMM Provider Unreachable during order placement:", fetchErr);
+        return res.status(502).json({
+          error: "SMM Provider connection timed out or is unreachable. No funds have been deducted. Please try again in a moment.",
+          success: false
         });
       }
 
@@ -514,39 +559,48 @@ async function startServer() {
       try {
         data = JSON.parse(responseText);
       } catch (parseErr) {
-        console.warn(`[SMM Order Parse Warning] Forwarded successfully but received non-JSON response, using order dispatch success:`, responseText.slice(0, 200));
-        const fallbackOrderNum = Math.floor(100000 + Math.random() * 900000);
-        return res.json({ 
-          order: fallbackOrderNum,
-          success: true,
-          orderId: String(fallbackOrderNum)
+        console.warn(`[SMM Order Parse Error] Provider returned non-JSON:`, responseText.slice(0, 200));
+        return res.status(502).json({
+          error: "SMM Provider returned an unexpected response. No funds were charged.",
+          success: false
         });
       }
-      
+
       if (data.error) {
-         console.warn(`[SMM Order Provider Rejection]:`, data.error);
-         // If provider rejects, but user wants order placed, or if it's test, fallback to success order ID or return error
-         const fallbackOrderNum = Math.floor(100000 + Math.random() * 900000);
-         return res.json({
-           order: fallbackOrderNum,
-           success: true,
-           orderId: String(fallbackOrderNum)
-         });
+        console.warn(`[SMM Order Provider Rejection]:`, data.error);
+        const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        if (errMsg.toLowerCase().includes("out of balance")) {
+          return res.status(400).json({
+            error: "SMM Provider API currently has insufficient balance to fulfill this order. No funds were charged from your wallet. Please notify the administrator to recharge the provider balance.",
+            success: false
+          });
+        }
+        return res.status(400).json({
+          error: errMsg,
+          success: false
+        });
       }
 
-      const orderNum = Number(data.order || data.orderId || Math.floor(100000 + Math.random() * 900000));
-      res.json({ 
+      const orderNum = Number(data.order || data.orderId);
+      if (!orderNum || isNaN(orderNum)) {
+        return res.status(400).json({
+          error: "Provider did not return a valid order ID. No funds were charged.",
+          success: false
+        });
+      }
+
+      return res.json({
         order: orderNum,
+        orderId: String(orderNum),
+        providerServiceId: resolvedServiceId,
         success: true,
-        orderId: String(orderNum)
+        message: "Order placed with provider successfully"
       });
     } catch (err: any) {
       console.error("SMM API Error:", err);
-      const fallbackOrderNum = Math.floor(100000 + Math.random() * 900000);
-      res.json({ 
-        order: fallbackOrderNum,
-        success: true,
-        orderId: String(fallbackOrderNum)
+      return res.status(500).json({
+        error: err.message || "Failed to process order. No funds were charged.",
+        success: false
       });
     }
   });

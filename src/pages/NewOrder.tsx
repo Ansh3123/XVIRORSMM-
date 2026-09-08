@@ -168,8 +168,10 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
 
       const providerOrderId = String(resData.orderId || resData.order || '');
       const userRef = doc(db, 'users', user.uid);
+      const orderRef = doc(collection(db, 'orders'));
+      const txRef = doc(collection(db, 'transactions'));
 
-      // 2. Transactionally lock and deduct the balance upon provider confirmation
+      // Atomically deduct balance AND create the order and transaction log in one single commit!
       await runTransaction(db, async (transaction) => {
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists()) {
@@ -180,35 +182,47 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         const currentTotalSpent = userSnap.data().totalSpent || 0;
         
         if (currentBalance < orderCharge) {
-          throw new Error("Insufficient balance. Please add funds to your wallet.");
+          throw new Error(`Insufficient balance. Current balance is ₹${currentBalance.toFixed(2)}, required is ₹${orderCharge.toFixed(2)}.`);
         }
         
+        // 1. Transactionally update user balance
         transaction.update(userRef, {
           balance: currentBalance - orderCharge,
           totalSpent: currentTotalSpent + orderCharge,
           updatedAt: Date.now()
         });
-      });
 
-      // 3. Document the successful order with immutable checkout details
-      await addDoc(collection(db, 'orders'), {
-        userId: user.uid,
-        serviceId: checkoutServiceId,
-        serviceName: checkoutServiceName,
-        link,
-        quantity: qty,
-        charge: orderCharge,
-        providerOrderId,
-        status: 'Processing', 
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+        // 2. Transactionally create order record in the same atomic commit
+        transaction.set(orderRef, {
+          userId: user.uid,
+          serviceId: String(checkoutServiceId),
+          serviceName: checkoutServiceName,
+          link: link.trim(),
+          quantity: qty,
+          charge: orderCharge,
+          providerOrderId: providerOrderId,
+          status: 'Processing', 
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+
+        // 3. Transactionally record wallet transaction in the same commit
+        transaction.set(txRef, {
+          userId: user.uid,
+          amount: orderCharge,
+          type: 'charge',
+          status: 'completed',
+          serviceName: checkoutServiceName,
+          orderId: orderRef.id,
+          createdAt: Date.now()
+        });
       });
       
-      setSuccess('Order placed successfully! Balance deducted.');
+      setSuccess(`Order #${orderRef.id.slice(0, 8).toUpperCase()} placed successfully! (Provider ID: ${providerOrderId})`);
       setLink('');
       setQuantity('');
     } catch (err: any) {
-      console.error(err);
+      console.error("Order Placement Error:", err);
       setError(err.message || 'Failed to place order. Please try again.');
     } finally {
       setSubmitting(false);

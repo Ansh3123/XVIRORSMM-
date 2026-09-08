@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { ALL_APP_SERVICES } from '../data/comprehensiveServices';
 
 export interface SMMService {
   service: number | string;
@@ -117,30 +118,18 @@ export const CURATED_SERVICES: Service[] = [
   { id: "4278", category: "IG Reels Views [ Cheap ]", name: "𝗜𝗻𝘀𝘁𝐚𝗴𝗿𝐚𝗺 𝗥𝗲𝗲𝗹𝘀 𝗩𝗶𝗲𝘄𝘀 | 𝗔𝗹𝗹 𝗟𝗶𝗻𝗸 | 100𝗞/𝗗𝗮𝘆 | 𝗜𝗻𝘀𝘁𝗮𝗻𝘁 🚀", price: 0.19 * 1.25, minOrder: 100, maxOrder: 1000000, status: 'active', rate: "0.19" },
   { id: "4383", category: "IG Reels Views [ Cheap ]", name: "𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦 𝐑𝐞𝐞𝐥𝐬 𝐕𝐢𝐞𝐰𝐬 𝐒𝐮𝐩𝐞𝐫𝐟𝐚𝐬𝐭 | 𝐀𝐥𝐥 𝐋𝐢𝐧𝐤 | 𝐃𝐚𝐲 200𝐊 🚀🚀🚀", price: 0.18 * 1.25, minOrder: 100, maxOrder: 1000000, status: 'active', rate: "0.18" },
   { id: "4148", category: "IG Reels Views [ Cheap ]", name: "𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦 𝐑𝐞𝐞𝐥𝐬 𝐕𝐢𝐞𝐰𝐬 [ 𝐍𝐨𝐧-𝐃𝐫𝐨𝐩 ] 300𝐤/500𝐤 𝐏𝐞𝐫 𝐇𝐨𝐮𝐫 | 𝐄𝐦𝐞𝐫𝐠𝐞𝐧𝐜𝐲 𝐔𝐩𝐝𝐚𝐭𝐞 ☠️ | 𝐋𝐢𝐟𝐞𝐭𝐢𝐦𝐞 𝐑𝐞𝐟𝐢𝐥𝐥 ♻️ | 𝐎𝐧𝐞 𝐜𝐥𝐢𝐜𝐤 𝐃𝐨𝐧𝐞 ✅", price: 0.349 * 1.25, minOrder: 100, maxOrder: 7000000, status: 'active', rate: "0.349" },
-  // Multi-Platform Curated Services
-  { id: "8001", category: "Spotify Plays & Followers", name: "Spotify Track Plays [Global / USA HQ Streams] - Non-Drop | 10K/Day | Lifetime Guarantee", price: 1.50 * 1.25, minOrder: 100, maxOrder: 1000000, status: 'active', rate: "1.50" },
-  { id: "8002", category: "Spotify Plays & Followers", name: "Spotify Artist & Playlist Followers [Worldwide Verified Streams] - High Retention ♻️", price: 2.20 * 1.25, minOrder: 100, maxOrder: 500000, status: 'active', rate: "2.20" },
-  { id: "8010", category: "Discord Members", name: "Discord Server Members [Offline / Realistic Accounts] - Instant Start ⚡", price: 3.50 * 1.25, minOrder: 50, maxOrder: 50000, status: 'active', rate: "3.50" },
-  { id: "8011", category: "Discord Members", name: "Discord Online Server Members [Voice & Chat Active] - 30 Days Refill ♻️", price: 7.80 * 1.25, minOrder: 50, maxOrder: 20000, status: 'active', rate: "7.80" },
-  { id: "8020", category: "Twitch Followers & Views", name: "Twitch Channel Followers [High Quality Real Looking] - Instant Start 🚀", price: 1.80 * 1.25, minOrder: 50, maxOrder: 100000, status: 'active', rate: "1.80" },
-  { id: "8021", category: "Twitch Followers & Views", name: "Twitch Live Stream Viewers [60 Minutes Duration] - Stable Non-Drop ⚡", price: 4.50 * 1.25, minOrder: 20, maxOrder: 5000, status: 'active', rate: "4.50" },
-  { id: "8030", category: "LinkedIn Connections & Followers", name: "LinkedIn Company Page Followers [Real Professional Profiles] - Non-Drop ♻️", price: 12.00 * 1.25, minOrder: 50, maxOrder: 25000, status: 'active', rate: "12.00" },
-  { id: "8031", category: "LinkedIn Connections & Followers", name: "LinkedIn Profile Connections & Endorsements [HQ Accounts] - Safe Delivery", price: 15.00 * 1.25, minOrder: 25, maxOrder: 10000, status: 'active', rate: "15.00" },
-  { id: "8040", category: "Pinterest Followers & Repins", name: "Pinterest Board Followers & Repins [Organic Looking Engagement] 📌", price: 2.40 * 1.25, minOrder: 100, maxOrder: 50000, status: 'active', rate: "2.40" },
-  { id: "8050", category: "Snapchat Followers & Story Views", name: "Snapchat Spotlight & Story Views [Global High Retention] 👻", price: 1.90 * 1.25, minOrder: 100, maxOrder: 200000, status: 'active', rate: "1.90" },
-  { id: "8060", category: "Reddit Upvotes & Members", name: "Reddit Post Upvotes [Safe & Organic Algorithm Boost] ⬆️", price: 14.50 * 1.25, minOrder: 20, maxOrder: 5000, status: 'active', rate: "14.50" },
-  { id: "8070", category: "SoundCloud Plays & Followers", name: "SoundCloud Track Plays [Worldwide HQ Listeners] - Ultra Fast 🎵", price: 0.90 * 1.25, minOrder: 500, maxOrder: 2000000, status: 'active', rate: "0.90" },
-  { id: "8080", category: "Vimeo Video Views", name: "Vimeo High Retention Video Views [Direct & Embed Views] - Lifetime ♻️", price: 1.20 * 1.25, minOrder: 100, maxOrder: 500000, status: 'active', rate: "1.20" }
+  // All Apps Complete Suite
+  ...ALL_APP_SERVICES
 ];
 
 export const APP_PLATFORMS = [
   'All Apps',
   'Instagram',
-  'Facebook',
   'YouTube',
+  'Facebook',
   'Telegram',
-  'Twitter / X',
   'TikTok',
+  'Twitter / X',
   'Spotify',
   'Discord',
   'Twitch',
@@ -150,8 +139,9 @@ export const APP_PLATFORMS = [
   'Reddit',
   'WhatsApp',
   'Google Maps',
-  'Vimeo',
+  'Threads',
   'SoundCloud',
+  'Vimeo',
   'Other Apps'
 ] as const;
 
@@ -159,6 +149,7 @@ export function getAppForService(service: Service | { category?: string; name?: 
   const raw = ((service.category || '') + ' ' + (service.name || ''));
   const norm = raw.normalize('NFKD').toLowerCase();
 
+  if (norm.includes('threads')) return 'Threads';
   if (norm.includes('instagram') || norm.includes('ig ') || norm.includes('ig-') || norm.includes('reels') || norm.includes('insta')) return 'Instagram';
   if (norm.includes('facebook') || norm.includes('fb ') || norm.includes('fb-')) return 'Facebook';
   if (norm.includes('youtube') || norm.includes('yt ') || norm.includes('yt-') || norm.includes('subscriber')) return 'YouTube';
@@ -176,7 +167,6 @@ export function getAppForService(service: Service | { category?: string; name?: 
   if (norm.includes('google') || norm.includes('review') || norm.includes('gmaps')) return 'Google Maps';
   if (norm.includes('vimeo')) return 'Vimeo';
   if (norm.includes('soundcloud')) return 'SoundCloud';
-  if (norm.includes('threads')) return 'Instagram';
   return 'Other Apps';
 }
 
