@@ -180,6 +180,9 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
         } else {
           providerError = `Provider rejected order (Status ${apiResponse.status})`;
         }
+        if (providerError.toLowerCase().includes("already in work") || providerError.toLowerCase().includes("link already")) {
+          providerError = "This link is currently being processed by the provider in another active order. Please wait for the previous order to finish or use a different link.";
+        }
         console.error("Provider Order Rejection:", providerError);
         setError(`Order Failed\nReason: ${providerError}`);
         setSubmitting(false);

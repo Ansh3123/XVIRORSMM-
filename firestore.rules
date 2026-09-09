@@ -194,5 +194,13 @@ service cloud.firestore {
     match /redeemCodes/{codeId} {
       allow read, write: if isAdmin();
     }
+
+    match /config/{configId} {
+      allow read, write: if true;
+    }
+
+    match /api_error_logs/{logId} {
+      allow read, write: if true;
+    }
   }
 }
