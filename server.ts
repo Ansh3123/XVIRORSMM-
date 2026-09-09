@@ -89,6 +89,17 @@ async function callProviderApi(action: string, params: Record<string, any> = {},
 
   if (responseText.trim().startsWith("<") || responseText.includes("<!DOCTYPE") || responseText.includes("<html") || !response.ok) {
     console.error(`[SMM Provider Error] action=${action}, status=${status}, raw response preview:`, responseText.slice(0, 300));
+    try {
+      await dbAdmin.collection("api_error_logs").add({
+        url: apiUrl,
+        action,
+        status,
+        rawHtmlPreview: responseText.slice(0, 1000),
+        createdAt: Date.now()
+      });
+    } catch (logErr) {
+      // ignore
+    }
     if (status === 405) {
       throw new Error("Provider rejected request (Status 405). Service temporarily unavailable or method not allowed by provider.");
     }
