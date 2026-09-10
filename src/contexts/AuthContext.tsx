@@ -46,58 +46,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userRef = doc(db, 'users', currentUser.uid);
         if (unsubDoc) unsubDoc(); // clear any previous listener
         unsubDoc = onSnapshot(userRef, async (userSnap) => {
-          const emailLower = (currentUser.email || '').toLowerCase().trim();
-          const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(emailLower);
-
           if (userSnap.exists()) {
             const data = userSnap.data();
-            
-            if (isSpecialAdmin) {
-              // Promote to admin if not already admin, strictly preserving any deposited balance
-              const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
-              if (data.role !== 'admin') {
-                const updatedData = {
-                  role: 'admin' as const,
-                  balance: preservedBalance,
-                  totalSpent: data.totalSpent || 0,
-                  email: currentUser.email || '',
+            const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
+            const updatedData = {
+              ...data,
+              role: 'admin' as const,
+              balance: preservedBalance,
+              totalSpent: data.totalSpent || 0,
+              email: currentUser.email || '',
+              adminSecret: 'XVIRORISTHEBEST213',
+              updatedAt: Date.now()
+            };
+            setUserData(updatedData as UserData);
+            setLoading(false);
+            if (data.role !== 'admin') {
+              try {
+                await setDoc(userRef, { 
+                  role: 'admin', 
                   adminSecret: 'XVIRORISTHEBEST213',
-                  updatedAt: Date.now()
-                };
-                setUserData(updatedData as UserData);
-                setLoading(false);
-                try {
-                  await setDoc(userRef, { 
-                    role: 'admin', 
-                    adminSecret: 'XVIRORISTHEBEST213',
-                    balance: preservedBalance,
-                    updatedAt: Date.now() 
-                  }, { merge: true });
-                } catch (err) {
-                  console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
-                }
-              } else {
-                setUserData({
-                  ...data,
                   balance: preservedBalance,
-                  totalSpent: data.totalSpent || 0
-                } as UserData);
-                setLoading(false);
+                  updatedAt: Date.now() 
+                }, { merge: true });
+              } catch (err) {
+                console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
               }
-            } else {
-              // Non-admin email: Keep whatever role and balance they have in Firestore
-              const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
-              setUserData({
-                ...data,
-                balance: preservedBalance,
-                totalSpent: data.totalSpent || 0
-              } as UserData);
-              setLoading(false);
             }
           } else {
-            const targetRole = isSpecialAdmin ? 'admin' : 'user';
             const newUserData: UserData = {
-              role: targetRole,
+              role: 'admin',
               balance: 0,
               totalSpent: 0,
               email: currentUser.email || '',
@@ -111,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ...newUserData,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
-                ...(isSpecialAdmin ? { adminSecret: 'XVIRORISTHEBEST213' } : {})
+                adminSecret: 'XVIRORISTHEBEST213'
               });
             } catch (err) {
               console.error("Firestore user creation failed:", err);
