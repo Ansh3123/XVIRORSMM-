@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, doc, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, doc, runTransaction, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, RefreshCw, Search, CheckCircle2 } from 'lucide-react';
@@ -121,80 +121,12 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
     setError('');
     setSuccess('');
 
+    const userRef = doc(db, 'users', user.uid);
+    const orderRef = doc(collection(db, 'orders'));
+    const txRef = doc(collection(db, 'transactions'));
+
     try {
-      // 1. Call the provider API first before debiting or creating order
-      let apiResponse;
-      try {
-        apiResponse = await fetch('/api/smm/order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            service: checkoutServiceId,
-            link,
-            quantity: qty
-          })
-        });
-
-        // If an intermediate proxy returns 405, retry with alternative route
-        if (apiResponse.status === 405) {
-          try {
-            apiResponse = await fetch('/api/smm/order/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                service: checkoutServiceId,
-                link,
-                quantity: qty
-              })
-            });
-          } catch (retryErr) {
-            console.warn("Retry failed:", retryErr);
-          }
-        }
-      } catch (apiErr: any) {
-        console.error("Network error hitting SMM provider:", apiErr);
-        setError(`Order Failed\nReason: Network error connecting to SMM provider (${apiErr.message || 'Unreachable'})`);
-        setSubmitting(false);
-        return;
-      }
-
-      let resData: any = {};
-      let parseFailed = false;
-      let rawText = '';
-      try {
-        rawText = await apiResponse.text();
-        resData = JSON.parse(rawText);
-      } catch (e) {
-        parseFailed = true;
-      }
-
-      if (!apiResponse.ok || resData.error) {
-        let providerError = '';
-        if (resData.error) {
-          providerError = resData.error;
-        } else if (parseFailed && rawText) {
-          const cleanText = rawText.replace(/<[^>]*>/g, '').trim();
-          providerError = cleanText.slice(0, 150) || `Server responded with status ${apiResponse.status}`;
-        } else {
-          providerError = `Provider rejected order (Status ${apiResponse.status})`;
-        }
-        if (providerError.toLowerCase().includes("already in work") || providerError.toLowerCase().includes("link already")) {
-          providerError = "This link is currently being processed by the provider in another active order. Please wait for the previous order to finish or use a different link.";
-        }
-        console.error("Provider Order Rejection:", providerError);
-        setError(`Order Failed\nReason: ${providerError}`);
-        setSubmitting(false);
-        return;
-      }
-
-      const providerOrderId = String(resData.orderId || resData.order || '');
-      const userRef = doc(db, 'users', user.uid);
-      const orderRef = doc(collection(db, 'orders'));
-      const txRef = doc(collection(db, 'transactions'));
-
-      // Atomically deduct balance AND create the order and transaction log in one single commit!
+      // 1. Create order in Firestore with status: 'pending' and deduct balance atomically
       await runTransaction(db, async (transaction) => {
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists()) {
@@ -208,14 +140,14 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           throw new Error(`Insufficient balance. Current balance is ₹${currentBalance.toFixed(2)}, required is ₹${orderCharge.toFixed(2)}.`);
         }
         
-        // 1. Transactionally update user balance
+        // Deduct balance
         transaction.update(userRef, {
           balance: currentBalance - orderCharge,
           totalSpent: currentTotalSpent + orderCharge,
           updatedAt: Date.now()
         });
 
-        // 2. Transactionally create order record in the same atomic commit
+        // Create order with status: 'pending'
         transaction.set(orderRef, {
           userId: user.uid,
           serviceId: String(checkoutServiceId),
@@ -223,13 +155,13 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           link: link.trim(),
           quantity: qty,
           charge: orderCharge,
-          providerOrderId: providerOrderId,
-          status: 'Processing', 
+          providerOrderId: '',
+          status: 'pending', 
           createdAt: Date.now(),
           updatedAt: Date.now()
         });
 
-        // 3. Transactionally record wallet transaction in the same commit
+        // Record transaction
         transaction.set(txRef, {
           userId: user.uid,
           amount: orderCharge,
@@ -239,6 +171,110 @@ export function NewOrderContent({ isWidget = false }: { isWidget?: boolean }) {
           orderId: orderRef.id,
           createdAt: Date.now()
         });
+      });
+
+      // 2. Immediately trigger the 'action=add' POST request to the provider with retry mechanism
+      let apiResponse: Response | null = null;
+      let resData: any = {};
+      const maxRetries = 3;
+      let attempt = 0;
+      let successOrder = false;
+
+      while (attempt < maxRetries && !successOrder) {
+        attempt++;
+        try {
+          apiResponse = await fetch('/api/smm/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              service: checkoutServiceId,
+              link,
+              quantity: qty
+            })
+          });
+
+          if (apiResponse.status === 405) {
+            apiResponse = await fetch('/api/smm/order/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                service: checkoutServiceId,
+                link,
+                quantity: qty
+              })
+            });
+          }
+
+          const rawText = await apiResponse.text();
+          try {
+            resData = JSON.parse(rawText);
+          } catch (e) {
+            resData = { error: rawText.replace(/<[^>]*>/g, '').trim() };
+          }
+
+          if (apiResponse.ok && !resData.error && (resData.order || resData.orderId)) {
+            successOrder = true;
+          } else {
+            const errStr = String(resData.error || '').toLowerCase();
+            if (errStr.includes('balance') || errStr.includes('incorrect service')) {
+              break;
+            }
+          }
+        } catch (netErr) {
+          console.warn(`[SMM Order Retry ${attempt}] Network error:`, netErr);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000 * attempt));
+          }
+        }
+      }
+
+      if (!successOrder) {
+        let providerError = resData.error || `Provider failed to process order after ${maxRetries} attempts`;
+        if (providerError.toLowerCase().includes("already in work") || providerError.toLowerCase().includes("link already")) {
+          providerError = "This link is currently being processed by the provider in another active order. Please wait for the previous order to finish or use a different link.";
+        }
+
+        // Refund user balance and mark order as Failed
+        await runTransaction(db, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (userSnap.exists()) {
+            const currentBalance = userSnap.data().balance || 0;
+            const currentTotalSpent = userSnap.data().totalSpent || 0;
+            transaction.update(userRef, {
+              balance: currentBalance + orderCharge,
+              totalSpent: Math.max(0, currentTotalSpent - orderCharge),
+              updatedAt: Date.now()
+            });
+          }
+          transaction.update(orderRef, {
+            status: 'Failed',
+            errorReason: providerError,
+            updatedAt: Date.now()
+          });
+          transaction.set(doc(collection(db, 'transactions')), {
+            userId: user.uid,
+            amount: orderCharge,
+            type: 'refund',
+            status: 'completed',
+            serviceName: checkoutServiceName,
+            orderId: orderRef.id,
+            createdAt: Date.now()
+          });
+        });
+
+        setError(`Order Failed & Refunded\nReason: ${providerError}`);
+        setSubmitting(false);
+        return;
+      }
+
+      // 3. Capture the provider-returned order ID into the firebase database
+      const providerOrderId = String(resData.orderId || resData.order || '');
+      await updateDoc(orderRef, {
+        providerOrderId: providerOrderId,
+        status: 'Processing',
+        updatedAt: Date.now()
       });
       
       setSuccess(`Order #${orderRef.id.slice(0, 8).toUpperCase()} placed successfully! (Provider ID: ${providerOrderId})`);

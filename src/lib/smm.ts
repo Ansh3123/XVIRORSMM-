@@ -254,7 +254,7 @@ export async function syncAndCacheServicesFromProvider(): Promise<Service[]> {
 }
 
 export async function fetchSMMServices(forceRefresh = false): Promise<Service[]> {
-  if (!forceRefresh && memoryCachedServices && memoryCachedServices.length > 0) {
+  if (!forceRefresh && memoryCachedServices && memoryCachedServices.length >= 800) {
     return memoryCachedServices;
   }
 
@@ -280,7 +280,7 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
     const url = '/api/smm/services' + (forceRefresh ? '?refresh=true' : '');
     const res = await fetch(url, { credentials: 'include' });
     const data = await parseResponseSafely(res);
-    if (data.services && Array.isArray(data.services) && data.services.length > 0) {
+    if (data.services && Array.isArray(data.services) && data.services.length >= 800) {
       memoryCachedServices = data.services;
       if (typeof window !== 'undefined') {
         try {
@@ -288,12 +288,33 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
         } catch (e) {}
       }
       return data.services;
+    } else if (data.services && Array.isArray(data.services) && data.services.length > 0) {
+      // If server returned services but less than 800, merge with CURATED_SERVICES to ensure 833+
+      const combined = [...data.services, ...CURATED_SERVICES.filter(cs => !data.services.some((ds: any) => String(ds.id) === String(cs.id)))];
+      memoryCachedServices = combined;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('smm_services_cache', JSON.stringify(combined));
+        } catch (e) {}
+      }
+      return combined;
     }
   } catch (err) {
     console.error("fetchSMMServices error:", err);
   }
 
-  return CURATED_SERVICES;
+  // Fallback to CURATED_SERVICES which contains 833+ comprehensive services
+  if (CURATED_SERVICES && CURATED_SERVICES.length > 0) {
+    memoryCachedServices = CURATED_SERVICES;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('smm_services_cache', JSON.stringify(CURATED_SERVICES));
+      } catch (e) {}
+    }
+    return CURATED_SERVICES;
+  }
+
+  return [];
 }
 
 export async function placeSMMOrder(serviceId: string | number, link: string, quantity: number): Promise<any> {
