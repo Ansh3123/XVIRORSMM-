@@ -42,6 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (currentUser) {
         setLoading(true);
         setUser(currentUser);
+        const specialAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
+        const userEmail = (currentUser.email || '').toLowerCase().trim();
+        const isSpecialAdmin = specialAdmins.includes(userEmail);
+
         // Use onSnapshot for real-time fast sync
         const userRef = doc(db, 'users', currentUser.uid);
         if (unsubDoc) unsubDoc(); // clear any previous listener
@@ -49,32 +53,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (userSnap.exists()) {
             const data = userSnap.data();
             const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
+            const finalRole = isSpecialAdmin ? 'admin' : (data.role || 'user');
             const updatedData = {
               ...data,
-              role: 'admin' as const,
+              role: finalRole,
               balance: preservedBalance,
               totalSpent: data.totalSpent || 0,
               email: currentUser.email || '',
-              adminSecret: 'XVIRORISTHEBEST213',
+              adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : data.adminSecret,
               updatedAt: Date.now()
             };
             setUserData(updatedData as UserData);
             setLoading(false);
-            if (data.role !== 'admin') {
+            if (data.role !== finalRole) {
               try {
                 await setDoc(userRef, { 
-                  role: 'admin', 
-                  adminSecret: 'XVIRORISTHEBEST213',
+                  role: finalRole, 
+                  adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : data.adminSecret,
                   balance: preservedBalance,
                   updatedAt: Date.now() 
                 }, { merge: true });
               } catch (err) {
-                console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
+                console.error("Firestore role sync failed:", err);
               }
             }
           } else {
+            const finalRole = isSpecialAdmin ? 'admin' : 'user';
             const newUserData: UserData = {
-              role: 'admin',
+              role: finalRole,
               balance: 0,
               totalSpent: 0,
               email: currentUser.email || '',
@@ -88,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ...newUserData,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
-                adminSecret: 'XVIRORISTHEBEST213'
+                adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined
               });
             } catch (err) {
               console.error("Firestore user creation failed:", err);
@@ -117,9 +123,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, pass: string) => {
-    const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email.toLowerCase().trim());
+    const specialAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
+    const isSpecialAdmin = specialAdmins.includes(email.toLowerCase().trim());
     
-    // Normal email & password sign-in for everyone (as user requested: "And rest with the mail and password")
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
 
     if (userCredential?.user) {
@@ -132,7 +138,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, pass: string) => {
-    const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email.toLowerCase().trim());
+    const specialAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
+    const isSpecialAdmin = specialAdmins.includes(email.toLowerCase().trim());
 
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     if (userCredential?.user) {
@@ -142,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         balance: 0,
         totalSpent: 0,
         email: email,
+        adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined,
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
