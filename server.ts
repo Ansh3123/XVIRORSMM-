@@ -38,8 +38,8 @@ let lastProviderFetchTime = 0;
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 async function getSmmConfig() {
-  let apiKey = process.env.SMM_API_KEY || "0b2b0654ad2a34d64f41b3c39782f4199d8ad566";
-  let apiUrl = process.env.SMM_API_URL || "https://themainsmmprovider.com/api/v2";
+  let apiKey = "0b2b0654ad2a34d64f41b3c39782f4199d8ad566";
+  let apiUrl = "https://themainsmmprovider.com/api/v2";
   try {
     const settingsSnap = await dbAdmin.collection("settings").doc("smm").get();
     if (settingsSnap.exists) {
@@ -56,9 +56,6 @@ async function getSmmConfig() {
   }
   if (!apiUrl || apiUrl.includes("/services") || !apiUrl.includes("/api/")) {
     apiUrl = "https://themainsmmprovider.com/api/v2";
-  }
-  if (!apiKey || apiKey === "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3") {
-    apiKey = "0b2b0654ad2a34d64f41b3c39782f4199d8ad566";
   }
   return { apiKey, apiUrl };
 }
@@ -951,12 +948,21 @@ async function startServer() {
   // Automatic service synchronization on startup
   setTimeout(async () => {
     try {
-      console.log("[Startup Service Sync] Synchronizing provider services into Firestore...");
+      console.log("[Startup Service Sync] Updating settings and synchronizing provider services into Firestore...");
+      try {
+        await dbAdmin.collection("settings").doc("smm").set({
+          apiKey: "0b2b0654ad2a34d64f41b3c39782f4199d8ad566",
+          apiUrl: "https://themainsmmprovider.com/api/v2",
+          updatedAt: Date.now()
+        }, { merge: true });
+      } catch (e) {}
+
+      cachedProviderServices = null;
       const rawData = await fetchProviderServices(true);
       if (Array.isArray(rawData) && rawData.length > 0) {
         const processed = formatSmmServices(rawData, 25);
         await saveServicesToFirestore(processed);
-        console.log(`[Startup Service Sync] Successfully synced ${processed.length} services to Firestore.`);
+        console.log(`[Startup Service Sync] Successfully synced ${processed.length} services to Firestore from https://themainsmmprovider.com/api/v2.`);
       }
     } catch (e) {
       console.warn("[Startup Service Sync] Non-fatal notice:", e);
