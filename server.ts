@@ -66,7 +66,7 @@ const DEFAULT_SMM_HEADERS = {
   "Accept": "application/json"
 };
 
-async function callProviderApi(action: string, params: Record<string, any> = {}, timeoutMs: number = 20000): Promise<any> {
+async function callProviderApi(action: string, params: Record<string, any> = {}, timeoutMs: number = 30000): Promise<any> {
   const { apiKey, apiUrl } = await getSmmConfig();
   const searchParams = new URLSearchParams({
     key: apiKey,
@@ -76,8 +76,13 @@ async function callProviderApi(action: string, params: Record<string, any> = {},
 
   const response = await fetch(apiUrl, {
     method: "POST",
-    headers: DEFAULT_SMM_HEADERS,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "application/json"
+    },
     body: searchParams,
+    redirect: "follow",
     signal: AbortSignal.timeout(timeoutMs)
   });
 
@@ -107,10 +112,22 @@ async function callProviderApi(action: string, params: Record<string, any> = {},
   }
 
   try {
-    return JSON.parse(responseText);
+    const sanitizedText = Buffer.from(responseText, 'utf-8').toString('utf-8');
+    return JSON.parse(sanitizedText);
   } catch (parseErr: any) {
-    console.error(`[SMM Provider Parse Error] action=${action}, raw response:`, responseText.slice(0, 250));
-    throw new Error(`Invalid JSON received from provider: ${responseText.slice(0, 100)}`);
+    try {
+      const cleaned = responseText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").replace(/\\u([0-9a-fA-F]{4})/g, (match, grp) => {
+        try {
+          return String.fromCharCode(parseInt(grp, 16));
+        } catch (e) {
+          return match;
+        }
+      });
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      console.error(`[SMM Provider Parse Error] action=${action}, raw response:`, responseText.slice(0, 250));
+      throw new Error(`Invalid JSON received from provider: ${responseText.slice(0, 100)}`);
+    }
   }
 }
 
@@ -125,29 +142,33 @@ async function saveServicesToFirestore(services: any[]): Promise<number> {
     const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:commit?key=${apiKey}`;
     const docPrefix = `projects/${projectId}/databases/${databaseId}/documents/services/`;
 
-    const writes = services.map(s => ({
-      update: {
-        name: docPrefix + s.id,
-        fields: {
-          id: { stringValue: String(s.id) },
-          service: { stringValue: String(s.id) },
-          providerServiceId: { stringValue: String(s.id) },
-          name: { stringValue: String(s.name || ("Service " + s.id)) },
-          category: { stringValue: String(s.category || "General") },
-          rate: { stringValue: String(s.rate || "0") },
-          price: { doubleValue: Number(s.price) || 10 },
-          minOrder: { integerValue: String(s.minOrder || 10) },
-          maxOrder: { integerValue: String(s.maxOrder || 10000) },
-          status: { stringValue: "active" },
-          type: { stringValue: String(s.type || "Default") },
-          desc: { stringValue: String(s.desc || "") },
-          dripfeed: { booleanValue: Boolean(s.dripfeed) },
-          refill: { booleanValue: Boolean(s.refill) },
-          cancel: { booleanValue: Boolean(s.cancel) },
-          updatedAt: { integerValue: String(Date.now()) }
+    const writes = services.map(s => {
+      const sId = String(s.service || s.id || '').trim();
+      return {
+        update: {
+          name: docPrefix + sId,
+          fields: {
+            id: { stringValue: sId },
+            service: { stringValue: sId },
+            providerServiceId: { stringValue: sId },
+            name: { stringValue: String(s.name || ("Service " + sId)) },
+            category: { stringValue: String(s.category || "General") },
+            rate: { stringValue: String(s.rate || s.price || "0") },
+            price: { doubleValue: Number(s.rate || s.price) || 10 },
+            minOrder: { integerValue: String(s.min || s.minOrder || 10) },
+            maxOrder: { integerValue: String(s.max || s.maxOrder || 10000) },
+            status: { stringValue: "active" },
+            is_active: { booleanValue: true },
+            type: { stringValue: String(s.type || "Default") },
+            desc: { stringValue: String(s.desc || s.description || "") },
+            dripfeed: { booleanValue: Boolean(s.dripfeed) },
+            refill: { booleanValue: Boolean(s.refill) },
+            cancel: { booleanValue: Boolean(s.cancel) },
+            updatedAt: { integerValue: String(Date.now()) }
+          }
         }
-      }
-    }));
+      };
+    });
 
     const CHUNK_SIZE = 200;
     let totalCommitted = 0;
