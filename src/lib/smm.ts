@@ -279,14 +279,26 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
     const url = '/api/smm/services' + (forceRefresh ? '?refresh=true' : '');
     const res = await fetch(url, { credentials: 'include' });
     const data = await parseResponseSafely(res);
-    if (data.services && Array.isArray(data.services) && data.services.length > 0) {
-      memoryCachedServices = data.services;
+    let finalServices = data.services && Array.isArray(data.services) ? data.services : [];
+    
+    // Always combine with CURATED_SERVICES to ensure 800+ comprehensive services are always available
+    const map = new Map<string, Service>();
+    for (const s of CURATED_SERVICES) {
+      map.set(String(s.id), s);
+    }
+    for (const s of finalServices) {
+      map.set(String(s.id), s);
+    }
+    finalServices = Array.from(map.values());
+
+    if (finalServices.length > 0) {
+      memoryCachedServices = finalServices;
       if (typeof window !== 'undefined') {
         try {
-          localStorage.setItem('smm_services_cache', JSON.stringify(data.services));
+          localStorage.setItem('smm_services_cache', JSON.stringify(finalServices));
         } catch (e) {}
       }
-      return data.services;
+      return finalServices;
     }
   } catch (err) {
     console.error("fetchSMMServices error:", err);

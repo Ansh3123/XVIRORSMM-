@@ -200,33 +200,22 @@ async function fetchProviderServices(force = false): Promise<any[]> {
     return cachedProviderServices;
   }
 
-  // 1. Always try fetching live from the SMM provider API first to ensure all 863+ services are loaded for all users
-  console.log(`[SMM Fetch Provider] Calling provider for live services...`);
+  let providerList: any[] = [];
   try {
     const data = await callProviderApi("services", {}, 45000);
     if (Array.isArray(data) && data.length > 0) {
       console.log(`[SMM Fetch Provider] Successfully fetched ${data.length} services from provider.`);
-      cachedProviderServices = data;
-      lastProviderFetchTime = Date.now();
-      
-      // Automatically save to Firestore cache in background so all users & devices have all 863+ services
-      try {
-        saveServicesToFirestore(data).catch(() => {});
-      } catch (err) {}
-
-      return data;
-    } else {
-      console.warn(`[SMM Fetch Provider] Response is not an array:`, typeof data);
+      providerList = data;
     }
   } catch (err: any) {
     console.warn("[SMM Fetch Provider] Error fetching live services:", err?.message || err);
   }
 
-  // 2. Fallback to Firestore Cache if provider call fails or times out
+  // 2. Fallback or merge with Firestore Cache
+  let firestoreList: any[] = [];
   try {
     const snap = await dbAdmin.collection("services").get();
     if (!snap.empty) {
-      const firestoreList: any[] = [];
       snap.forEach(doc => {
         const d = doc.data();
         firestoreList.push({
@@ -240,40 +229,56 @@ async function fetchProviderServices(force = false): Promise<any[]> {
           desc: d.desc || ''
         });
       });
-      if (firestoreList.length > 0) {
-        console.log(`[Firestore Services Cache] Loaded ${firestoreList.length} services from Firestore cache.`);
-        cachedProviderServices = firestoreList;
-        lastProviderFetchTime = Date.now();
-        return firestoreList;
-      }
     }
   } catch (e) {
     console.warn("[Firestore Services Cache Read Warning]:", e);
   }
 
-  if (cachedProviderServices && cachedProviderServices.length > 0) {
-    return cachedProviderServices;
-  }
-
-  // 3. Fallback to local comprehensive services if provider times out or is offline
+  // 3. Always get ALL_APP_SERVICES
+  let localList: any[] = [];
   try {
     const { ALL_APP_SERVICES } = await import('./src/data/comprehensiveServices.js');
     if (Array.isArray(ALL_APP_SERVICES) && ALL_APP_SERVICES.length > 0) {
-      console.log(`[SMM Fetch Provider] Falling back to ${ALL_APP_SERVICES.length} comprehensive local services.`);
-      const localList = ALL_APP_SERVICES.map(s => ({
+      localList = ALL_APP_SERVICES.map(s => ({
         service: s.id,
         name: s.name,
         category: s.category,
         rate: s.rate || String(s.price),
         min: String(s.minOrder),
         max: String(s.maxOrder),
-        type: s.type || 'Default'
+        type: s.type || 'Default',
+        desc: s.desc || ''
       }));
-      return localList;
     }
   } catch (e) {}
 
-  return [];
+  // Combine and de-duplicate by service ID
+  const map = new Map<string, any>();
+  // Add local comprehensive first as robust base
+  for (const s of localList) {
+    map.set(String(s.service), s);
+  }
+  // Add firestore list
+  for (const s of firestoreList) {
+    map.set(String(s.service), s);
+  }
+  // Add provider list (overriding with live provider data if available)
+  for (const s of providerList) {
+    const sId = String(s.service || s.id);
+    map.set(sId, {
+      ...s,
+      service: sId
+    });
+  }
+
+  const combined = Array.from(map.values());
+  if (combined.length > 0) {
+    cachedProviderServices = combined;
+    lastProviderFetchTime = Date.now();
+    return combined;
+  }
+
+  return localList;
 }
 
 function patchNginxAuthBridge() {
