@@ -479,45 +479,7 @@ async function startServer() {
   });
 
   async function resolveProviderServiceId(serviceId: string | number): Promise<string> {
-    const strId = String(serviceId || '').trim();
-    if (!strId) return strId;
-
-    const numId = parseInt(strId, 10);
-    // If it is already a known provider service ID below 7000, use directly
-    if (numId < 7000 && !isNaN(numId)) {
-      return strId;
-    }
-
-    // Map curated IDs to real active provider services
-    if (numId >= 7000) {
-      // Instagram Followers (7001..7003)
-      if (numId === 7003) return "6134"; // Indian Followers
-      if (numId >= 7001 && numId <= 7003) return "6133"; // HQ Followers
-      // Instagram Likes (7004..7006)
-      if (numId >= 7004 && numId <= 7006) return "6093"; // Likes
-      // Instagram Reels Views (7007..7008)
-      if (numId >= 7007 && numId <= 7008) return "4278"; // Reels Views
-      // Instagram Comments (7009)
-      if (numId === 7009) return "5974"; // Comments
-      // Instagram Story Views (7010)
-      if (numId === 7010) return "5951"; // Story Views
-      // YouTube Subscribers (7011..7013)
-      if (numId >= 7011 && numId <= 7013) return "5573"; // YouTube Subs
-      // YouTube Views (7014..7015)
-      if (numId >= 7014 && numId <= 7015) return "5573";
-      // Facebook Followers / Page Likes (7020..7023)
-      if (numId >= 7020 && numId <= 7023) return "5780"; // FB Followers
-      // Facebook Likes (7024)
-      if (numId === 7024) return "5826"; // FB Likes
-      // Telegram Members (7025..7027)
-      if (numId >= 7025 && numId <= 7027) return "5510"; // TG Members
-      // TikTok Likes (7030..7032)
-      if (numId >= 7030 && numId <= 7032) return "4225"; // TikTok Likes
-      // Twitter Views (7034..7036)
-      if (numId >= 7034 && numId <= 7036) return "4443"; // Twitter Views
-    }
-
-    return strId;
+    return String(serviceId || '').trim();
   }
 
   app.post("/api/smm/order", async (req, res) => {
