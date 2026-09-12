@@ -42,45 +42,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (currentUser) {
         setLoading(true);
         setUser(currentUser);
-        const specialAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
-        const userEmail = (currentUser.email || '').toLowerCase().trim();
-        const isSpecialAdmin = specialAdmins.includes(userEmail);
-
         // Use onSnapshot for real-time fast sync
         const userRef = doc(db, 'users', currentUser.uid);
         if (unsubDoc) unsubDoc(); // clear any previous listener
         unsubDoc = onSnapshot(userRef, async (userSnap) => {
+          const emailLower = (currentUser.email || '').toLowerCase().trim();
+          const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(emailLower);
+
           if (userSnap.exists()) {
             const data = userSnap.data();
-            const preservedBalance = typeof data.balance === 'number' ? data.balance : 0;
-            const finalRole = isSpecialAdmin ? 'admin' : (data.role || 'user');
-            const updatedData = {
-              ...data,
-              role: finalRole,
-              balance: preservedBalance,
-              totalSpent: data.totalSpent || 0,
-              email: currentUser.email || '',
-              adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : data.adminSecret,
-              updatedAt: Date.now()
-            };
-            setUserData(updatedData as UserData);
-            setLoading(false);
-            if (data.role !== finalRole) {
-              try {
-                await setDoc(userRef, { 
-                  role: finalRole, 
-                  adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : data.adminSecret,
-                  balance: preservedBalance,
-                  updatedAt: Date.now() 
-                }, { merge: true });
-              } catch (err) {
-                console.error("Firestore role sync failed:", err);
+            
+            if (isSpecialAdmin) {
+              // Promote to admin if not already admin
+              if (data.role !== 'admin') {
+                const updatedData = {
+                  role: 'admin' as const,
+                  balance: 0,
+                  totalSpent: data.totalSpent || 0,
+                  email: currentUser.email || '',
+                  adminSecret: 'XVIRORISTHEBEST213',
+                  updatedAt: Date.now()
+                };
+                setUserData(updatedData as UserData);
+                setLoading(false);
+                try {
+                  await setDoc(userRef, { 
+                    role: 'admin', 
+                    adminSecret: 'XVIRORISTHEBEST213',
+                    balance: 0,
+                    updatedAt: Date.now() 
+                  }, { merge: true });
+                } catch (err) {
+                  console.error("Firestore auto-promotion failed, but user is locally authenticated as admin:", err);
+                }
+              } else {
+                setUserData(data as UserData);
+                setLoading(false);
               }
+            } else {
+              // Non-admin email: Keep whatever role they have in Firestore (manual admin or standard user)
+              setUserData(data as UserData);
+              setLoading(false);
             }
           } else {
-            const finalRole = isSpecialAdmin ? 'admin' : 'user';
+            const targetRole = isSpecialAdmin ? 'admin' : 'user';
             const newUserData: UserData = {
-              role: finalRole,
+              role: targetRole,
               balance: 0,
               totalSpent: 0,
               email: currentUser.email || '',
@@ -94,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ...newUserData,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
-                adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined
+                ...(isSpecialAdmin ? { adminSecret: 'XVIRORISTHEBEST213' } : {})
               });
             } catch (err) {
               console.error("Firestore user creation failed:", err);
@@ -123,9 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, pass: string) => {
-    const specialAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
-    const isSpecialAdmin = specialAdmins.includes(email.toLowerCase().trim());
+    const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email.toLowerCase().trim());
     
+    // Normal email & password sign-in for everyone (as user requested: "And rest with the mail and password")
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
 
     if (userCredential?.user) {
@@ -138,8 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, pass: string) => {
-    const specialAdmins = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'];
-    const isSpecialAdmin = specialAdmins.includes(email.toLowerCase().trim());
+    const isSpecialAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email.toLowerCase().trim());
 
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     if (userCredential?.user) {
@@ -149,7 +155,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         balance: 0,
         totalSpent: 0,
         email: email,
-        adminSecret: isSpecialAdmin ? 'XVIRORISTHEBEST213' : undefined,
         createdAt: Date.now(),
         updatedAt: Date.now()
       });

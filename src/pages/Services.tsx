@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchSMMServices, Service, APP_PLATFORMS, getAppForService } from '../lib/smm';
 
 export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
+  const { userData } = useAuth();
+  const isAdmin = userData?.role === 'admin';
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,7 +33,7 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
 
   useEffect(() => {
     loadServices();
-  }, []);
+  }, [isAdmin]);
 
   const availableApps = useMemo(() => {
     const appsSet = new Set<string>(APP_PLATFORMS);
@@ -153,7 +155,7 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
                   ) : (
                     filteredServices.map((service) => (
                       <tr key={service.id}>
-                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 font-mono">{service.id}</td>
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{service.id.slice(0, 8)}</td>
                         <td className="px-3 py-4 text-sm text-gray-900">{service.category}</td>
                         <td className="px-3 py-4 text-sm text-gray-900">{service.name}</td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">₹{service.price.toFixed(4)}</td>

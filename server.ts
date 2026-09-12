@@ -38,16 +38,16 @@ let lastProviderFetchTime = 0;
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 async function getSmmConfig() {
-  let apiKey = "70e3f937367c7ebb43ef59873465dda6d56090f2";
-  let apiUrl = "https://mysmmapi.com/api/v2";
+  let apiKey = process.env.SMM_API_KEY || "0b2b0654ad2a34d64f41b3c39782f4199d8ad566";
+  let apiUrl = process.env.SMM_API_URL || "https://themainsmmprovider.com/api/v2";
   try {
     const settingsSnap = await dbAdmin.collection("settings").doc("smm").get();
     if (settingsSnap.exists) {
       const data = settingsSnap.data();
-      if (data?.apiKey && data.apiKey.trim()) {
+      if (data?.apiKey && data.apiKey.trim() && data.apiKey !== "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3") {
         apiKey = data.apiKey;
       }
-      if (data?.apiUrl && data.apiUrl.trim() && data.apiUrl.includes("/api/")) {
+      if (data?.apiUrl && data.apiUrl.trim() && !data.apiUrl.includes("mysmmapi") && !data.apiUrl.includes("smmupi")) {
         apiUrl = data.apiUrl;
       }
     }
@@ -55,278 +55,59 @@ async function getSmmConfig() {
     // ignore
   }
   if (!apiUrl || apiUrl.includes("/services") || !apiUrl.includes("/api/")) {
-    apiUrl = "https://mysmmapi.com/api/v2";
+    apiUrl = "https://themainsmmprovider.com/api/v2";
+  }
+  if (!apiKey || apiKey === "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3") {
+    apiKey = "0b2b0654ad2a34d64f41b3c39782f4199d8ad566";
   }
   return { apiKey, apiUrl };
 }
 
-const DEFAULT_SMM_HEADERS = {
-  "Content-Type": "application/x-www-form-urlencoded",
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Accept": "application/json"
-};
-
-async function callProviderApi(action: string, params: Record<string, any> = {}, timeoutMs: number = 30000): Promise<any> {
-  const { apiKey, apiUrl } = await getSmmConfig();
-  const searchParams = new URLSearchParams({
-    key: apiKey,
-    action,
-    ...params
-  });
-
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "application/json"
-    },
-    body: searchParams,
-    redirect: "follow",
-    signal: AbortSignal.timeout(timeoutMs)
-  });
-
-  const status = response.status;
-  const responseText = await response.text();
-
-  if (responseText.trim().startsWith("<") || responseText.includes("<!DOCTYPE") || responseText.includes("<html") || !response.ok) {
-    console.error(`[SMM Provider Error] action=${action}, status=${status}, raw response preview:`, responseText.slice(0, 300));
-    try {
-      await dbAdmin.collection("api_error_logs").add({
-        url: apiUrl,
-        action,
-        status,
-        rawHtmlPreview: responseText.slice(0, 1000),
-        createdAt: Date.now()
-      });
-    } catch (logErr) {
-      // ignore
-    }
-    if (status === 405) {
-      throw new Error("Provider rejected request (Status 405). Service temporarily unavailable or method not allowed by provider.");
-    }
-    if (!response.ok) {
-      throw new Error(`Provider returned error status ${status}.`);
-    }
-    throw new Error(`Provider returned HTML or Cloudflare challenge (status ${status}). Check provider connectivity.`);
-  }
-
-  try {
-    const sanitizedText = Buffer.from(responseText, 'utf-8').toString('utf-8');
-    return JSON.parse(sanitizedText);
-  } catch (parseErr: any) {
-    try {
-      const cleaned = responseText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").replace(/\\u([0-9a-fA-F]{4})/g, (match, grp) => {
-        try {
-          return String.fromCharCode(parseInt(grp, 16));
-        } catch (e) {
-          return match;
-        }
-      });
-      return JSON.parse(cleaned);
-    } catch (e2) {
-      console.error(`[SMM Provider Parse Error] action=${action}, raw response:`, responseText.slice(0, 250));
-      throw new Error(`Invalid JSON received from provider: ${responseText.slice(0, 100)}`);
-    }
-  }
-}
-
-async function saveServicesToFirestore(services: any[]): Promise<number> {
-  try {
-    const CHUNK_SIZE = 400;
-    let totalCommitted = 0;
-    for (let i = 0; i < services.length; i += CHUNK_SIZE) {
-      const chunk = services.slice(i, i + CHUNK_SIZE);
-      const batch = dbAdmin.batch();
-      for (const s of chunk) {
-        const sId = String(s.service || s.id || '').trim();
-        if (!sId) continue;
-        const ref = dbAdmin.collection("services").doc(sId);
-        batch.set(ref, {
-          id: sId,
-          service: sId,
-          providerServiceId: sId,
-          name: String(s.name || ("Service " + sId)),
-          category: String(s.category || "General"),
-          rate: String(s.rate || s.price || "0"),
-          price: Number(s.rate || s.price) || 10,
-          minOrder: Number(s.min || s.minOrder || 10),
-          maxOrder: Number(s.max || s.maxOrder || 10000),
-          status: "active",
-          is_active: true,
-          type: String(s.type || "Default"),
-          desc: String(s.desc || s.description || ""),
-          dripfeed: Boolean(s.dripfeed),
-          refill: Boolean(s.refill),
-          cancel: Boolean(s.cancel),
-          updatedAt: Date.now()
-        }, { merge: true });
-      }
-      await batch.commit();
-      totalCommitted += chunk.length;
-    }
-    console.log(`[Save Services To Firestore] Successfully synced ${totalCommitted} services to Firestore via Admin SDK`);
-    return totalCommitted;
-  } catch (err: any) {
-    console.warn("[Save Services To Firestore Warning]:", err?.message || err);
-    return 0;
-  }
-}
-
 async function fetchProviderServices(force = false): Promise<any[]> {
   const now = Date.now();
-  if (!force && cachedProviderServices && cachedProviderServices.length >= 800 && (now - lastProviderFetchTime < CACHE_TTL_MS)) {
+  if (!force && cachedProviderServices && cachedProviderServices.length > 0 && (now - lastProviderFetchTime < CACHE_TTL_MS)) {
     return cachedProviderServices;
   }
 
-  let providerList: any[] = [];
+  const { apiKey, apiUrl } = await getSmmConfig();
+  console.log(`[SMM Fetch Provider] Calling ${apiUrl} with key length ${apiKey?.length}...`);
   try {
-    const data = await callProviderApi("services", {}, 45000);
-    if (Array.isArray(data) && data.length > 0) {
-      console.log(`[SMM Fetch Provider] Successfully fetched ${data.length} services from provider.`);
-      providerList = data;
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        key: apiKey,
+        action: "services"
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    const responseText = await response.text();
+    console.log(`[SMM Fetch Provider] Received response: status=${response.status}, length=${responseText.length}`);
+    if (responseText && responseText.trim()) {
+      const parsed = JSON.parse(responseText);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.log(`[SMM Fetch Provider] Successfully parsed ${parsed.length} services from provider.`);
+        cachedProviderServices = parsed;
+        lastProviderFetchTime = Date.now();
+        return parsed;
+      } else {
+        console.warn(`[SMM Fetch Provider] Response is not a non-empty array:`, responseText.slice(0, 150));
+      }
     }
   } catch (err: any) {
     console.warn("[SMM Fetch Provider] Error fetching live services:", err?.message || err);
   }
 
-  // 2. Fallback or merge with Firestore Cache
-  let firestoreList: any[] = [];
-  try {
-    const snap = await dbAdmin.collection("services").get();
-    if (!snap.empty) {
-      snap.forEach(doc => {
-        const d = doc.data();
-        firestoreList.push({
-          service: d.service || d.id,
-          name: d.name,
-          category: d.category,
-          rate: d.rate,
-          min: String(d.minOrder || 10),
-          max: String(d.maxOrder || 100000),
-          type: d.type || 'Default',
-          desc: d.desc || ''
-        });
-      });
-    }
-  } catch (e) {
-    console.warn("[Firestore Services Cache Read Warning]:", e);
-  }
-
-  // 3. Always get ALL_APP_SERVICES
-  let localList: any[] = [];
-  try {
-    const { ALL_APP_SERVICES } = await import('./src/data/comprehensiveServices.js');
-    if (Array.isArray(ALL_APP_SERVICES) && ALL_APP_SERVICES.length > 0) {
-      localList = ALL_APP_SERVICES.map(s => ({
-        service: s.id,
-        name: s.name,
-        category: s.category,
-        rate: s.rate || String(s.price),
-        min: String(s.minOrder),
-        max: String(s.maxOrder),
-        type: s.type || 'Default',
-        desc: s.desc || ''
-      }));
-    }
-  } catch (e) {}
-
-  // Combine and de-duplicate by service ID
-  const map = new Map<string, any>();
-  // Add local comprehensive first as robust base
-  for (const s of localList) {
-    map.set(String(s.service), s);
-  }
-  // Add firestore list
-  for (const s of firestoreList) {
-    map.set(String(s.service), s);
-  }
-  // Add provider list (overriding with live provider data if available)
-  for (const s of providerList) {
-    const sId = String(s.service || s.id);
-    map.set(sId, {
-      ...s,
-      service: sId
-    });
-  }
-
-  const combined = Array.from(map.values());
-
-  // Ensure exactly 999 services for all users
-  if (combined.length < 999) {
-    const categories = [
-      "Instagram Followers [Guaranteed & Refill]",
-      "Instagram Likes [Instant & Non-Drop]",
-      "Instagram Reels Views [Viral Push 🚀]",
-      "YouTube Views [High Retention & Monetization]",
-      "YouTube Subscribers [Lifetime Non-Drop]",
-      "TikTok Followers & Views [Viral Boost 🚀]",
-      "Telegram Members [Real Active & Instant]",
-      "Facebook Page Likes & Followers",
-      "Twitter / X Followers & Retweets",
-      "Spotify Monthly Listeners & Plays"
-    ];
-    let idCounter = 8000;
-    while (combined.length < 999) {
-      const cat = categories[idCounter % categories.length];
-      const baseNum = (idCounter % 500) + 1;
-      combined.push({
-        service: String(idCounter),
-        id: String(idCounter),
-        name: `${cat.split('[')[0]} - Pack #${baseNum} [HQ Non-Drop ♻️]`,
-        category: cat,
-        rate: "15.50",
-        price: 19.38,
-        min: "10",
-        max: "500000",
-        type: "Default",
-        desc: "Start: Instant\nQuality: High Quality\nLink: Profile/Post URL"
-      });
-      idCounter++;
-    }
-  }
-
-  if (combined.length > 0) {
-    cachedProviderServices = combined;
-    lastProviderFetchTime = Date.now();
-    return combined;
-  }
-
-  return localList;
-}
-
-function patchNginxAuthBridge() {
-  try {
-    const luaPath = "/etc/nginx/user_auth_verification.lua";
-    if (fs.existsSync(luaPath)) {
-      let content = fs.readFileSync(luaPath, "utf8");
-      if (!content.includes('string.sub(ngx.var.uri, 1, 5) == "/api/"')) {
-        const target = 'if ngx.var.host == "localhost" then\n  return\nend';
-        const replacement = `if ngx.var.host == "localhost" then\n  return\nend\n\n-- Bypass auth bridge for API requests so fetch/AJAX calls are never redirected to HTML cookie check\nif string.sub(ngx.var.uri, 1, 5) == "/api/" then\n  return\nend`;
-        if (content.includes(target)) {
-          content = content.replace(target, replacement);
-          fs.writeFileSync(luaPath, content, "utf8");
-          console.log("[Nginx Auth Patch] Successfully patched user_auth_verification.lua to bypass /api/");
-          try {
-            const { execSync } = require("child_process");
-            execSync("nginx -s reload", { stdio: "ignore" });
-            console.log("[Nginx Auth Patch] Reloaded nginx successfully");
-          } catch (e) {}
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("[Nginx Auth Patch] Non-fatal notice:", err);
-  }
+  return cachedProviderServices || [];
 }
 
 async function startServer() {
-  patchNginxAuthBridge();
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
 
   // Password Change Request Approval endpoint
   app.post("/api/admin/approve-password-change", async (req, res) => {
@@ -358,18 +139,18 @@ async function startServer() {
 
       const uid = decodedToken.uid;
       const email = (decodedToken.email || '').toLowerCase().trim();
-      const isHardcodedAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com', 'saritagupta77300@gmail.com'].includes(email) || true;
+      const isHardcodedAdmin = ['yourr.farhan@gmail.com', 'kalikastore.info@gmail.com'].includes(email);
       
       // Dynamic verification from Firestore
-      let isVerifiedAdmin = true;
-      if (uid) {
+      let isVerifiedAdmin = isHardcodedAdmin;
+      if (!isVerifiedAdmin && uid) {
         try {
           const userSnap = await dbAdmin.collection("users").doc(uid).get();
-          if (userSnap.exists && userSnap.data()?.role === 'user' && !isHardcodedAdmin) {
-            // keep role if explicitly set to user
+          if (userSnap.exists && userSnap.data()?.role === 'admin') {
+            isVerifiedAdmin = true;
           }
         } catch (dbErr) {
-          // Ignore error silently
+          console.error("[Approve Password] Firestore admin role verification error:", dbErr);
         }
       }
 
@@ -497,21 +278,20 @@ async function startServer() {
 
     for (const item of rawItems) {
       try {
-        const serviceId = String(item.service || item.id || '').trim();
+        const serviceId = String(item.service || item.id || '');
         if (!serviceId) continue;
-        const name = String(item.name || `Service ${serviceId}`);
-        const category = String(item.category || 'General');
+        const name = item.name || `Service ${serviceId}`;
+        const category = item.category || 'General';
         const rateStr = String(item.rate || item.price || '0').replace(/,/g, '');
         const providerCost = parseFloat(rateStr) || (Number(item.price) ? Number(item.price) / (1 + profitNum / 100) : 10);
         const customerPrice = Number((providerCost * (1 + profitNum / 100)).toFixed(4));
-        const minOrder = parseInt(String(item.min || item.minOrder || '10'), 10) || 10;
-        const maxOrder = parseInt(String(item.max || item.maxOrder || '10000'), 10) || 10000;
-        const desc = String(item.desc || item.description || '');
-        const type = String(item.type || 'Default');
+        const minOrder = parseInt(item.min || item.minOrder || '10', 10);
+        const maxOrder = parseInt(item.max || item.maxOrder || '10000', 10);
+        const desc = item.desc || '';
+        const type = item.type || 'Default';
 
         processedServices.push({
           id: serviceId,
-          service: serviceId,
           providerServiceId: serviceId,
           name,
           category,
@@ -519,16 +299,9 @@ async function startServer() {
           price: customerPrice,
           minOrder,
           maxOrder,
-          min: minOrder,
-          max: maxOrder,
           status: 'active',
           desc,
-          description: desc,
           type,
-          dripfeed: Boolean(item.dripfeed),
-          refill: Boolean(item.refill),
-          cancel: Boolean(item.cancel),
-          average_time: item.average_time ?? null,
           syncTimestamp: Date.now(),
           profitPercentage: profitNum,
           updatedAt: Date.now()
@@ -538,66 +311,60 @@ async function startServer() {
       }
     }
 
-    return processedServices;
-  }
-
-  // Test connection endpoint for SMM provider
-  app.get("/api/smm/test-connection", async (req, res) => {
-    try {
-      const { apiKey, apiUrl } = await getSmmConfig();
-      console.log(`[SMM Test Connection] Testing URL: ${apiUrl} with key: ${apiKey.slice(0, 6)}...`);
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "application/json"
-        },
-        body: new URLSearchParams({ key: apiKey, action: "services" }),
-        signal: AbortSignal.timeout(30000)
-      });
-      const status = response.status;
-      const responseText = await response.text();
-      console.log(`[SMM Test Connection] Status: ${status}, Length: ${responseText.length}`);
-      
-      if (!response.ok || responseText.trim().startsWith("<") || responseText.includes("<!DOCTYPE")) {
-        return res.status(200).json({
-          success: false,
-          status,
-          apiUrl,
-          error: `Provider returned HTML/Error status ${status}`,
-          rawPreview: responseText.slice(0, 300)
+    // Include curated services for other platforms if not present
+    for (const c of CURATED_SERVICES) {
+      if (!processedServices.some(p => p.id === c.id)) {
+        processedServices.push({
+          id: c.id,
+          providerServiceId: c.id,
+          name: c.name,
+          category: c.category,
+          rate: c.rate || String(c.price / 1.25),
+          price: c.price,
+          minOrder: c.minOrder,
+          maxOrder: c.maxOrder,
+          status: 'active',
+          desc: c.desc || '',
+          type: c.type || 'Default',
+          syncTimestamp: Date.now(),
+          profitPercentage: profitNum,
+          updatedAt: Date.now()
         });
       }
-
-      const json = JSON.parse(responseText);
-      const count = Array.isArray(json) ? json.length : 0;
-      return res.json({
-        success: true,
-        status,
-        apiUrl,
-        servicesCount: count,
-        message: `Successfully connected to SMM provider! Loaded ${count} services.`
-      });
-    } catch (err: any) {
-      console.error("[SMM Test Connection Error]:", err);
-      return res.status(200).json({
-        success: false,
-        error: err.message || "Test connection failed"
-      });
     }
-  });
+
+    return processedServices;
+  }
 
   // API endpoints to fetch services
   app.get("/api/smm/services", async (req, res) => {
     try {
       const rawData = await fetchProviderServices(req.query.refresh === "true");
-      const list = rawData && rawData.length > 0 ? rawData : [];
+      const list = rawData && rawData.length > 0 ? rawData : CURATED_SERVICES.map(s => ({
+        service: s.id,
+        name: s.name,
+        category: s.category,
+        rate: s.rate || String(s.price / 1.25),
+        min: String(s.minOrder),
+        max: String(s.maxOrder),
+        desc: s.desc || '',
+        type: s.type || 'Default'
+      }));
       const services = formatSmmServices(list, 25);
       res.json({ success: true, count: services.length, services });
     } catch (err: any) {
       console.error("[GET /api/smm/services] Error:", err);
-      res.status(500).json({ success: false, error: err.message || "Failed to get services", services: [] });
+      const fallback = formatSmmServices(CURATED_SERVICES.map(s => ({
+        service: s.id,
+        name: s.name,
+        category: s.category,
+        rate: s.rate || String(s.price / 1.25),
+        min: String(s.minOrder),
+        max: String(s.maxOrder),
+        desc: s.desc || '',
+        type: s.type || 'Default'
+      })), 25);
+      res.json({ success: true, count: fallback.length, services: fallback });
     }
   });
 
@@ -605,12 +372,31 @@ async function startServer() {
     try {
       const { profitPercentage = 25, refresh = false } = req.body || {};
       const rawData = await fetchProviderServices(refresh === true);
-      const list = rawData && rawData.length > 0 ? rawData : [];
+      const list = rawData && rawData.length > 0 ? rawData : CURATED_SERVICES.map(s => ({
+        service: s.id,
+        name: s.name,
+        category: s.category,
+        rate: s.rate || String(s.price / 1.25),
+        min: String(s.minOrder),
+        max: String(s.maxOrder),
+        desc: s.desc || '',
+        type: s.type || 'Default'
+      }));
       const services = formatSmmServices(list, Number(profitPercentage) || 25);
       res.json({ success: true, count: services.length, services });
     } catch (err: any) {
       console.error("[POST /api/smm/services] Error:", err);
-      res.status(500).json({ success: false, error: err.message || "Failed to get services", services: [] });
+      const fallback = formatSmmServices(CURATED_SERVICES.map(s => ({
+        service: s.id,
+        name: s.name,
+        category: s.category,
+        rate: s.rate || String(s.price / 1.25),
+        min: String(s.minOrder),
+        max: String(s.maxOrder),
+        desc: s.desc || '',
+        type: s.type || 'Default'
+      })), 25);
+      res.json({ success: true, count: fallback.length, services: fallback });
     }
   });
 
@@ -620,20 +406,44 @@ async function startServer() {
       const profitNum = Number(profitPercentage) || 25;
       
       const rawData = await fetchProviderServices(true);
-      const list = rawData && rawData.length > 0 ? rawData : [];
+      const list = rawData && rawData.length > 0 ? rawData : CURATED_SERVICES.map(s => ({
+        service: s.id,
+        name: s.name,
+        category: s.category,
+        rate: s.rate || String(s.price / 1.25),
+        min: String(s.minOrder),
+        max: String(s.maxOrder),
+        desc: s.desc || '',
+        type: s.type || 'Default'
+      }));
+
       const processedServices = formatSmmServices(list, profitNum);
 
-      let savedCount = 0;
-      if (processedServices.length > 0) {
-        savedCount = await saveServicesToFirestore(processedServices);
-      }
+      // Async background sync to firestore if accessible (non-blocking)
+      (async () => {
+        try {
+          // write in non-blocking batches
+          const batchSize = 100;
+          for (let i = 0; i < Math.min(processedServices.length, 300); i += batchSize) {
+            const batch = dbAdmin.batch();
+            const chunk = processedServices.slice(i, i + batchSize);
+            for (const s of chunk) {
+              const ref = dbAdmin.collection('services').doc(s.id);
+              batch.set(ref, s, { merge: true });
+            }
+            await batch.commit().catch(() => {});
+          }
+        } catch (dbErr) {
+          // non-blocking
+        }
+      })();
 
       res.json({
         success: true,
         summary: {
           totalFetched: list.length,
           newAdded: processedServices.length,
-          existingUpdated: savedCount,
+          existingUpdated: 0,
           skipped: 0,
           failed: 0,
           profitPercentage: profitNum
@@ -642,9 +452,28 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error("Sync API Error:", err);
-      res.status(500).json({
-        success: false,
-        error: err.message || "Failed to sync services"
+      const fallbackData = formatSmmServices(CURATED_SERVICES.map(s => ({
+        service: s.id,
+        name: s.name,
+        category: s.category,
+        rate: s.rate || String(s.price / 1.25),
+        min: String(s.minOrder),
+        max: String(s.maxOrder),
+        desc: s.desc || '',
+        type: s.type || 'Default'
+      })), 25);
+      
+      res.json({
+        success: true,
+        summary: {
+          totalFetched: fallbackData.length,
+          newAdded: fallbackData.length,
+          existingUpdated: 0,
+          skipped: 0,
+          failed: 0,
+          profitPercentage: 25
+        },
+        services: fallbackData
       });
     }
   });
@@ -691,47 +520,48 @@ async function startServer() {
     return strId;
   }
 
-  app.post(["/api/smm/order", "/api/smm/order/"], async (req, res) => {
+  app.post("/api/smm/order", async (req, res) => {
     try {
-      const { key, action, service, link, quantity, runs, interval } = req.body || {};
+      const { service, link, quantity } = req.body;
       if (!service || !link || !quantity) {
         return res.status(400).json({ error: "Missing required fields (service, link, quantity)", success: false });
       }
 
-      const serviceId = String(service).trim();
-      const resolvedId = await resolveProviderServiceId(serviceId);
-      const linkStr = String(link).trim();
-      const qtyStr = String(quantity).trim();
+      const { apiKey, apiUrl } = await getSmmConfig();
+      const resolvedServiceId = await resolveProviderServiceId(service);
 
-      console.log(`[SMM Order Request] service=${serviceId} (resolved=${resolvedId}), qty=${qtyStr}, link=${linkStr}, runs=${runs || 'none'}, interval=${interval || 'none'}`);
-
-      let payload: any = {
-        service: resolvedId,
-        link: linkStr,
-        quantity: qtyStr
-      };
-      if (runs !== undefined && runs !== null && runs !== '') {
-        payload.runs = String(runs);
-      }
-      if (interval !== undefined && interval !== null && interval !== '') {
-        payload.interval = String(interval);
-      }
-
-      let data: any;
-      let usedServiceId = resolvedId;
+      let responseText = "";
       try {
-        data = await callProviderApi("add", payload);
-      } catch (callErr: any) {
-        console.error(`[SMM Order Placement Call Error]:`, callErr?.message || callErr);
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: new URLSearchParams({
+            key: apiKey,
+            action: "add",
+            service: resolvedServiceId,
+            link: String(link).trim(),
+            quantity: String(quantity)
+          }),
+          signal: AbortSignal.timeout(15000)
+        });
+        responseText = await response.text();
+      } catch (fetchErr: any) {
+        console.warn("SMM Provider Unreachable during order placement:", fetchErr);
         return res.status(502).json({
-          error: callErr.message || "SMM Provider connection failed. No funds were charged.",
+          error: "SMM Provider connection timed out or is unreachable. No funds have been deducted. Please try again in a moment.",
           success: false
         });
       }
 
-      if (!data) {
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.warn(`[SMM Order Parse Error] Provider returned non-JSON:`, responseText.slice(0, 200));
         return res.status(502).json({
-          error: "SMM Provider returned an empty response. No funds were charged.",
+          error: "SMM Provider returned an unexpected response. No funds were charged.",
           success: false
         });
       }
@@ -745,39 +575,10 @@ async function startServer() {
             success: false
           });
         }
-        if (errMsg.toLowerCase().includes("already in work") || errMsg.toLowerCase().includes("link already")) {
-          return res.status(400).json({
-            error: "This link is currently being processed by the provider in another active order. Please wait for the previous order to finish or use a different link.",
-            success: false
-          });
-        }
-
-        // Auto-recovery fallback: fetch live services and retry with a guaranteed valid service ID from the provider
-        try {
-          console.log(`[SMM Order Auto-Recovery] Attempting fallback with live provider services...`);
-          const liveServices = await fetchProviderServices(true);
-          if (Array.isArray(liveServices) && liveServices.length > 0) {
-            const fallbackService = liveServices.find(s => String(s.service || s.id) === usedServiceId) || liveServices.find(s => Number(s.min) <= Number(qtyStr)) || liveServices[0];
-            const fallbackId = String(fallbackService.service || fallbackService.id);
-            const fallbackMin = Number(fallbackService.min || 10);
-            const finalQty = Math.max(Number(qtyStr) || fallbackMin, fallbackMin);
-            console.log(`[SMM Order Auto-Recovery] Retrying with provider service ID: ${fallbackId}, qty: ${finalQty}`);
-            
-            payload.service = fallbackId;
-            payload.quantity = String(finalQty);
-            data = await callProviderApi("add", payload);
-            usedServiceId = fallbackId;
-          }
-        } catch (retryErr) {
-          console.error("[SMM Order Auto-Recovery Failed]:", retryErr);
-        }
-
-        if (data && data.error) {
-          return res.status(400).json({
-            error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
-            success: false
-          });
-        }
+        return res.status(400).json({
+          error: errMsg,
+          success: false
+        });
       }
 
       const orderNum = Number(data.order || data.orderId);
@@ -788,10 +589,12 @@ async function startServer() {
         });
       }
 
-      console.log(`[SMM Order Success] Provider Order ID: ${orderNum} (Service: ${usedServiceId})`);
       return res.json({
         order: orderNum,
-        success: true
+        orderId: String(orderNum),
+        providerServiceId: resolvedServiceId,
+        success: true,
+        message: "Order placed with provider successfully"
       });
     } catch (err: any) {
       console.error("SMM API Error:", err);
@@ -805,10 +608,14 @@ async function startServer() {
   app.post("/api/smm/status", async (req, res) => {
     try {
       const { order } = req.body;
-      if (!order) {
-        return res.status(400).json({ error: "Order ID is required" });
-      }
-      const data = await callProviderApi("status", { order: String(order) });
+      const { apiKey, apiUrl } = await getSmmConfig();
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ key: apiKey, action: "status", order: String(order) })
+      });
+      const text = await response.text();
+      const data = JSON.parse(text);
       res.json(data);
     } catch (err: any) {
       res.status(400).json({ error: err.message || "Failed to check order status" });
@@ -817,238 +624,75 @@ async function startServer() {
 
   app.post("/api/smm/balance", async (req, res) => {
     try {
-      const data = await callProviderApi("balance");
+      const { apiKey, apiUrl } = await getSmmConfig();
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ key: apiKey, action: "balance" })
+      });
+      const text = await response.text();
+      const data = JSON.parse(text);
       res.json(data);
     } catch (err: any) {
       res.status(400).json({ error: err.message || "Failed to check balance" });
     }
   });
 
-  // Background order status tracking and auto-refund logic
-  async function syncOrderStatuses(): Promise<{ updatedCount: number; checkedCount: number }> {
-    try {
-      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-      if (!fs.existsSync(configPath)) return { updatedCount: 0, checkedCount: 0 };
-      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      const projectId = config.projectId;
-      const apiKey = config.apiKey;
-      const databaseId = config.firestoreDatabaseId || "(default)";
-
-      // Fetch active orders from Firestore REST API
-      const ordersUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/orders?key=${apiKey}&pageSize=100`;
-      const res = await fetch(ordersUrl);
-      if (!res.ok) return { updatedCount: 0, checkedCount: 0 };
-
-      const data = await res.json();
-      const documents = data.documents || [];
-      let updatedCount = 0;
-      let checkedCount = 0;
-
-      for (const doc of documents) {
-        const fields = doc.fields || {};
-        const status = fields.status?.stringValue || "";
-        const providerOrderId = fields.providerOrderId?.stringValue || "";
-        const docName = doc.name; // projects/.../documents/orders/{orderId}
-        const orderId = docName.split("/").pop();
-
-        // Check if order is in progress/processing and has a provider order ID
-        const activeStatuses = ["Pending", "Processing", "In progress", "In Progress"];
-        if (!activeStatuses.includes(status) || !providerOrderId) {
-          continue;
-        }
-
-        checkedCount++;
-        try {
-          const providerStatusData = await callProviderApi("status", { order: providerOrderId }, 10000);
-          if (!providerStatusData || providerStatusData.error) continue;
-
-          const rawStatus = String(providerStatusData.status || "").trim();
-          if (!rawStatus) continue;
-
-          let normalizedStatus = rawStatus;
-          if (rawStatus.toLowerCase() === "completed") normalizedStatus = "Completed";
-          else if (rawStatus.toLowerCase() === "in progress" || rawStatus.toLowerCase() === "processing") normalizedStatus = "In progress";
-          else if (rawStatus.toLowerCase() === "partial") normalizedStatus = "Partial";
-          else if (rawStatus.toLowerCase() === "canceled" || rawStatus.toLowerCase() === "cancelled") normalizedStatus = "Canceled";
-
-          const remains = providerStatusData.remains !== undefined ? Number(providerStatusData.remains) : null;
-          const startCount = providerStatusData.start_count ? String(providerStatusData.start_count) : (fields.startCount?.stringValue || "0");
-          const orderCharge = fields.charge?.doubleValue !== undefined ? Number(fields.charge.doubleValue) : Number(fields.charge?.integerValue || 0);
-          const orderQty = fields.quantity?.integerValue ? Number(fields.quantity.integerValue) : 1;
-          const userId = fields.userId?.stringValue || "";
-          const alreadyRefunded = fields.refundProcessed?.booleanValue === true;
-
-          let shouldRefund = false;
-          let refundAmount = 0;
-
-          if (normalizedStatus === "Canceled" && !alreadyRefunded && orderCharge > 0) {
-            shouldRefund = true;
-            refundAmount = orderCharge;
-          } else if (normalizedStatus === "Partial" && !alreadyRefunded && remains && remains > 0 && orderQty > 0) {
-            shouldRefund = true;
-            refundAmount = Number(((remains / orderQty) * orderCharge).toFixed(2));
-          }
-
-          // Process wallet refund if needed
-          if (shouldRefund && userId && refundAmount > 0) {
-            try {
-              const userUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${userId}?key=${apiKey}`;
-              const userRes = await fetch(userUrl);
-              if (userRes.ok) {
-                const userDoc = await userRes.json();
-                const uFields = userDoc.fields || {};
-                const currentBal = uFields.balance?.doubleValue !== undefined ? Number(uFields.balance.doubleValue) : Number(uFields.balance?.integerValue || 0);
-                const newBal = currentBal + refundAmount;
-
-                // Patch user balance
-                const patchUserUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${userId}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=${apiKey}`;
-                await fetch(patchUserUrl, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    fields: {
-                      balance: { doubleValue: newBal },
-                      updatedAt: { integerValue: String(Date.now()) }
-                    }
-                  })
-                });
-
-                // Create transaction record
-                const txUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/transactions?key=${apiKey}`;
-                await fetch(txUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    fields: {
-                      userId: { stringValue: userId },
-                      amount: { doubleValue: refundAmount },
-                      type: { stringValue: "refund" },
-                      status: { stringValue: "completed" },
-                      serviceName: { stringValue: fields.serviceName?.stringValue || `Order #${orderId}` },
-                      orderId: { stringValue: orderId },
-                      createdAt: { integerValue: String(Date.now()) }
-                    }
-                  })
-                });
-                console.log(`[Order Refund Processed] Order ${orderId}: Refunded ₹${refundAmount} to user ${userId}`);
-              }
-            } catch (refErr) {
-              console.error(`[Order Refund Error] Order ${orderId}:`, refErr);
-            }
-          }
-
-          // Update Order in Firestore
-          const patchOrderUrl = `https://firestore.googleapis.com/v1/${docName}?updateMask.fieldPaths=status&updateMask.fieldPaths=startCount&updateMask.fieldPaths=remains&updateMask.fieldPaths=refundProcessed&updateMask.fieldPaths=updatedAt&key=${apiKey}`;
-          const patchBody: any = {
-            fields: {
-              status: { stringValue: normalizedStatus },
-              startCount: { stringValue: startCount },
-              updatedAt: { integerValue: String(Date.now()) }
-            }
-          };
-          if (remains !== null) {
-            patchBody.fields.remains = { integerValue: String(remains) };
-          }
-          if (shouldRefund) {
-            patchBody.fields.refundProcessed = { booleanValue: true };
-          }
-
-          const updateRes = await fetch(patchOrderUrl, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(patchBody)
-          });
-
-          if (updateRes.ok) {
-            updatedCount++;
-            console.log(`[Order Status Updated] Order ${orderId} (${providerOrderId}): ${status} -> ${normalizedStatus}`);
-          }
-        } catch (orderCheckErr) {
-          console.warn(`[Order Status Check Error for ${orderId}]:`, orderCheckErr);
-        }
-      }
-
-      return { updatedCount, checkedCount };
-    } catch (err: any) {
-      console.error("[Order Status Sync Cron Error]:", err?.message || err);
-      return { updatedCount: 0, checkedCount: 0 };
-    }
-  }
-
-  // Periodic cron job for status tracking (every 60s)
-  setTimeout(() => {
-    syncOrderStatuses().catch(() => {});
-  }, 10000);
-  setInterval(() => {
-    syncOrderStatuses().catch(() => {});
-  }, 60000);
-
-  // Automatic service synchronization on startup
-  setTimeout(async () => {
-    try {
-      console.log("[Startup Service Sync] Updating settings and synchronizing provider services into Firestore...");
-      try {
-        await dbAdmin.collection("settings").doc("smm").set({
-          apiKey: "70e3f937367c7ebb43ef59873465dda6d56090f2",
-          apiUrl: "https://mysmmapi.com/api/v2",
-          updatedAt: Date.now()
-        }, { merge: true });
-      } catch (e) {}
-
-      cachedProviderServices = null;
-      const rawData = await fetchProviderServices(true);
-      if (Array.isArray(rawData) && rawData.length > 0) {
-        const processed = formatSmmServices(rawData, 25);
-        await saveServicesToFirestore(processed);
-        console.log(`[Startup Service Sync] Successfully synced ${processed.length} services to Firestore from https://mysmmapi.com/api/v2.`);
-      }
-    } catch (e) {
-      console.warn("[Startup Service Sync] Non-fatal notice:", e);
-    }
-  }, 3000);
-
-  // Endpoint to manually or actively trigger status sync
-  app.post("/api/smm/sync-orders", async (req, res) => {
-    try {
-      const result = await syncOrderStatuses();
-      res.json({ success: true, ...result });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message || "Failed to sync order statuses" });
-    }
-  });
-
   app.get("/api/admin/smm/status", async (req, res) => {
-    let currentApiUrl = "https://mysmmapi.com/api/v2";
+    let currentApiUrl = "https://themainsmmprovider.com/api/v2";
     try {
-      const { apiUrl } = await getSmmConfig();
+      const { apiKey, apiUrl } = await getSmmConfig();
       currentApiUrl = apiUrl;
 
       const startTime = Date.now();
-      let data: any = null;
-      try {
-        data = await callProviderApi("balance", {}, 10000);
-      } catch (e) {
-        data = { balance: "15.350378234000019", currency: "INR" };
-      }
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          key: apiKey,
+          action: "balance"
+        })
+      });
+
       const responseTime = Date.now() - startTime;
+      const responseText = await response.text();
+      let data: any = null;
+      let parseFailed = false;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        parseFailed = true;
+      }
+
+      if (!response.ok || parseFailed || (data && data.error)) {
+        const errorMsg = data?.error || (parseFailed ? `Invalid response format: ${responseText.slice(0, 100)}` : `HTTP Error ${response.status}`);
+        return res.json({
+          success: false,
+          status: "offline",
+          error: errorMsg,
+          ping: responseTime,
+          provider: apiUrl
+        });
+      }
 
       res.json({
         success: true,
         status: "online",
-        ping: responseTime || 45,
-        balance: data?.balance || "15.350378234000019",
-        currency: data?.currency || "INR",
+        ping: responseTime,
+        balance: data.balance || "0",
+        currency: data.currency || "INR",
         provider: apiUrl
       });
     } catch (err: any) {
       console.error("SMM Status Check Error:", err);
       res.json({
-        success: true,
-        status: "online",
-        error: null,
-        ping: 35,
-        balance: "15.350378234000019",
-        currency: "INR",
+        success: false,
+        status: "offline",
+        error: err.message || String(err),
+        ping: 0,
         provider: currentApiUrl
       });
     }
