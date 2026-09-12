@@ -258,7 +258,7 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
     return memoryCachedServices;
   }
 
-  // Instant local cache resolution
+  // Instant local cache resolution if >= 800 items
   if (!forceRefresh && typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem('smm_services_cache');
@@ -266,7 +266,6 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length >= 800) {
           memoryCachedServices = parsed;
-          // Background refresh to stay in sync
           setTimeout(() => {
             fetchSMMServices(true).catch(() => {});
           }, 1500);
@@ -280,7 +279,7 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
     const url = '/api/smm/services' + (forceRefresh ? '?refresh=true' : '');
     const res = await fetch(url, { credentials: 'include' });
     const data = await parseResponseSafely(res);
-    if (data.services && Array.isArray(data.services) && data.services.length >= 800) {
+    if (data.services && Array.isArray(data.services) && data.services.length > 0) {
       memoryCachedServices = data.services;
       if (typeof window !== 'undefined') {
         try {
@@ -288,29 +287,13 @@ export async function fetchSMMServices(forceRefresh = false): Promise<Service[]>
         } catch (e) {}
       }
       return data.services;
-    } else if (data.services && Array.isArray(data.services) && data.services.length > 0) {
-      // If server returned services but less than 800, merge with CURATED_SERVICES to ensure 833+
-      const combined = [...data.services, ...CURATED_SERVICES.filter(cs => !data.services.some((ds: any) => String(ds.id) === String(cs.id)))];
-      memoryCachedServices = combined;
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('smm_services_cache', JSON.stringify(combined));
-        } catch (e) {}
-      }
-      return combined;
     }
   } catch (err) {
     console.error("fetchSMMServices error:", err);
   }
 
-  // Fallback to CURATED_SERVICES which contains 833+ comprehensive services
   if (CURATED_SERVICES && CURATED_SERVICES.length > 0) {
     memoryCachedServices = CURATED_SERVICES;
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('smm_services_cache', JSON.stringify(CURATED_SERVICES));
-      } catch (e) {}
-    }
     return CURATED_SERVICES;
   }
 
