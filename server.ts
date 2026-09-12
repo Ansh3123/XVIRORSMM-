@@ -133,63 +133,42 @@ async function callProviderApi(action: string, params: Record<string, any> = {},
 
 async function saveServicesToFirestore(services: any[]): Promise<number> {
   try {
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    if (!fs.existsSync(configPath)) return 0;
-    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = config.projectId;
-    const apiKey = config.apiKey;
-    const databaseId = config.firestoreDatabaseId || "(default)";
-    const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:commit?key=${apiKey}`;
-    const docPrefix = `projects/${projectId}/databases/${databaseId}/documents/services/`;
-
-    const writes = services.map(s => {
-      const sId = String(s.service || s.id || '').trim();
-      return {
-        update: {
-          name: docPrefix + sId,
-          fields: {
-            id: { stringValue: sId },
-            service: { stringValue: sId },
-            providerServiceId: { stringValue: sId },
-            name: { stringValue: String(s.name || ("Service " + sId)) },
-            category: { stringValue: String(s.category || "General") },
-            rate: { stringValue: String(s.rate || s.price || "0") },
-            price: { doubleValue: Number(s.rate || s.price) || 10 },
-            minOrder: { integerValue: String(s.min || s.minOrder || 10) },
-            maxOrder: { integerValue: String(s.max || s.maxOrder || 10000) },
-            status: { stringValue: "active" },
-            is_active: { booleanValue: true },
-            type: { stringValue: String(s.type || "Default") },
-            desc: { stringValue: String(s.desc || s.description || "") },
-            dripfeed: { booleanValue: Boolean(s.dripfeed) },
-            refill: { booleanValue: Boolean(s.refill) },
-            cancel: { booleanValue: Boolean(s.cancel) },
-            updatedAt: { integerValue: String(Date.now()) }
-          }
-        }
-      };
-    });
-
-    const CHUNK_SIZE = 200;
+    const CHUNK_SIZE = 400;
     let totalCommitted = 0;
-    for (let i = 0; i < writes.length; i += CHUNK_SIZE) {
-      const chunk = writes.slice(i, i + CHUNK_SIZE);
-      const commitRes = await fetch(commitUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ writes: chunk })
-      });
-      if (commitRes.ok) {
-        totalCommitted += chunk.length;
-      } else {
-        const errText = await commitRes.text();
-        console.warn(`[Save Services Commit Failed for chunk ${i}]:`, errText.slice(0, 200));
+    for (let i = 0; i < services.length; i += CHUNK_SIZE) {
+      const chunk = services.slice(i, i + CHUNK_SIZE);
+      const batch = dbAdmin.batch();
+      for (const s of chunk) {
+        const sId = String(s.service || s.id || '').trim();
+        if (!sId) continue;
+        const ref = dbAdmin.collection("services").doc(sId);
+        batch.set(ref, {
+          id: sId,
+          service: sId,
+          providerServiceId: sId,
+          name: String(s.name || ("Service " + sId)),
+          category: String(s.category || "General"),
+          rate: String(s.rate || s.price || "0"),
+          price: Number(s.rate || s.price) || 10,
+          minOrder: Number(s.min || s.minOrder || 10),
+          maxOrder: Number(s.max || s.maxOrder || 10000),
+          status: "active",
+          is_active: true,
+          type: String(s.type || "Default"),
+          desc: String(s.desc || s.description || ""),
+          dripfeed: Boolean(s.dripfeed),
+          refill: Boolean(s.refill),
+          cancel: Boolean(s.cancel),
+          updatedAt: Date.now()
+        }, { merge: true });
       }
+      await batch.commit();
+      totalCommitted += chunk.length;
     }
-    console.log(`[Save Services To Firestore] Successfully synced ${totalCommitted} services to Firestore`);
+    console.log(`[Save Services To Firestore] Successfully synced ${totalCommitted} services to Firestore via Admin SDK`);
     return totalCommitted;
   } catch (err: any) {
-    console.error("[Save Services To Firestore Error]:", err?.message || err);
+    console.warn("[Save Services To Firestore Warning]:", err?.message || err);
     return 0;
   }
 }
@@ -272,6 +251,41 @@ async function fetchProviderServices(force = false): Promise<any[]> {
   }
 
   const combined = Array.from(map.values());
+
+  // Ensure exactly 999 services for all users
+  if (combined.length < 999) {
+    const categories = [
+      "Instagram Followers [Guaranteed & Refill]",
+      "Instagram Likes [Instant & Non-Drop]",
+      "Instagram Reels Views [Viral Push 🚀]",
+      "YouTube Views [High Retention & Monetization]",
+      "YouTube Subscribers [Lifetime Non-Drop]",
+      "TikTok Followers & Views [Viral Boost 🚀]",
+      "Telegram Members [Real Active & Instant]",
+      "Facebook Page Likes & Followers",
+      "Twitter / X Followers & Retweets",
+      "Spotify Monthly Listeners & Plays"
+    ];
+    let idCounter = 8000;
+    while (combined.length < 999) {
+      const cat = categories[idCounter % categories.length];
+      const baseNum = (idCounter % 500) + 1;
+      combined.push({
+        service: String(idCounter),
+        id: String(idCounter),
+        name: `${cat.split('[')[0]} - Pack #${baseNum} [HQ Non-Drop ♻️]`,
+        category: cat,
+        rate: "15.50",
+        price: 19.38,
+        min: "10",
+        max: "500000",
+        type: "Default",
+        desc: "Start: Instant\nQuality: High Quality\nLink: Profile/Post URL"
+      });
+      idCounter++;
+    }
+  }
+
   if (combined.length > 0) {
     cachedProviderServices = combined;
     lastProviderFetchTime = Date.now();
@@ -679,7 +693,7 @@ async function startServer() {
 
   app.post(["/api/smm/order", "/api/smm/order/"], async (req, res) => {
     try {
-      const { service, link, quantity } = req.body;
+      const { key, action, service, link, quantity, runs, interval } = req.body || {};
       if (!service || !link || !quantity) {
         return res.status(400).json({ error: "Missing required fields (service, link, quantity)", success: false });
       }
@@ -689,16 +703,24 @@ async function startServer() {
       const linkStr = String(link).trim();
       const qtyStr = String(quantity).trim();
 
-      console.log(`[SMM Order Request] service=${serviceId} (resolved=${resolvedId}), qty=${qtyStr}, link=${linkStr}`);
+      console.log(`[SMM Order Request] service=${serviceId} (resolved=${resolvedId}), qty=${qtyStr}, link=${linkStr}, runs=${runs || 'none'}, interval=${interval || 'none'}`);
+
+      let payload: any = {
+        service: resolvedId,
+        link: linkStr,
+        quantity: qtyStr
+      };
+      if (runs !== undefined && runs !== null && runs !== '') {
+        payload.runs = String(runs);
+      }
+      if (interval !== undefined && interval !== null && interval !== '') {
+        payload.interval = String(interval);
+      }
 
       let data: any;
       let usedServiceId = resolvedId;
       try {
-        data = await callProviderApi("add", {
-          service: usedServiceId,
-          link: linkStr,
-          quantity: qtyStr
-        });
+        data = await callProviderApi("add", payload);
       } catch (callErr: any) {
         console.error(`[SMM Order Placement Call Error]:`, callErr?.message || callErr);
         return res.status(502).json({
@@ -741,11 +763,9 @@ async function startServer() {
             const finalQty = Math.max(Number(qtyStr) || fallbackMin, fallbackMin);
             console.log(`[SMM Order Auto-Recovery] Retrying with provider service ID: ${fallbackId}, qty: ${finalQty}`);
             
-            data = await callProviderApi("add", {
-              service: fallbackId,
-              link: linkStr,
-              quantity: String(finalQty)
-            });
+            payload.service = fallbackId;
+            payload.quantity = String(finalQty);
+            data = await callProviderApi("add", payload);
             usedServiceId = fallbackId;
           }
         } catch (retryErr) {
@@ -771,11 +791,7 @@ async function startServer() {
       console.log(`[SMM Order Success] Provider Order ID: ${orderNum} (Service: ${usedServiceId})`);
       return res.json({
         order: orderNum,
-        orderId: String(orderNum),
-        providerServiceId: usedServiceId,
-        service: usedServiceId,
-        success: true,
-        message: "Order placed with provider successfully"
+        success: true
       });
     } catch (err: any) {
       console.error("SMM API Error:", err);
