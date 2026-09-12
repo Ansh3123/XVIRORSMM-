@@ -4,8 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchSMMServices, Service, APP_PLATFORMS, getAppForService } from '../lib/smm';
 
 export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
-  const { userData } = useAuth();
-  const isAdmin = userData?.role === 'admin';
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +31,7 @@ export function ServicesContent({ isWidget = false }: { isWidget?: boolean }) {
 
   useEffect(() => {
     loadServices();
-  }, [isAdmin]);
+  }, []);
 
   const availableApps = useMemo(() => {
     const appsSet = new Set<string>(APP_PLATFORMS);

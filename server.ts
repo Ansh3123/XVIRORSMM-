@@ -38,16 +38,16 @@ let lastProviderFetchTime = 0;
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 async function getSmmConfig() {
-  let apiKey = "0b2b0654ad2a34d64f41b3c39782f4199d8ad566";
-  let apiUrl = "https://themainsmmprovider.com/api/v2";
+  let apiKey = "70e3f937367c7ebb43ef59873465dda6d56090f2";
+  let apiUrl = "https://mysmmapi.com/api/v2";
   try {
     const settingsSnap = await dbAdmin.collection("settings").doc("smm").get();
     if (settingsSnap.exists) {
       const data = settingsSnap.data();
-      if (data?.apiKey && data.apiKey.trim() && data.apiKey !== "e49ffb3020580b2e96fb7d48a8bb1c4cde020be3") {
+      if (data?.apiKey && data.apiKey.trim()) {
         apiKey = data.apiKey;
       }
-      if (data?.apiUrl && data.apiUrl.trim() && !data.apiUrl.includes("mysmmapi") && !data.apiUrl.includes("smmupi")) {
+      if (data?.apiUrl && data.apiUrl.trim() && data.apiUrl.includes("/api/")) {
         apiUrl = data.apiUrl;
       }
     }
@@ -55,7 +55,7 @@ async function getSmmConfig() {
     // ignore
   }
   if (!apiUrl || apiUrl.includes("/services") || !apiUrl.includes("/api/")) {
-    apiUrl = "https://themainsmmprovider.com/api/v2";
+    apiUrl = "https://mysmmapi.com/api/v2";
   }
   return { apiKey, apiUrl };
 }
@@ -972,8 +972,8 @@ async function startServer() {
       console.log("[Startup Service Sync] Updating settings and synchronizing provider services into Firestore...");
       try {
         await dbAdmin.collection("settings").doc("smm").set({
-          apiKey: "0b2b0654ad2a34d64f41b3c39782f4199d8ad566",
-          apiUrl: "https://themainsmmprovider.com/api/v2",
+          apiKey: "70e3f937367c7ebb43ef59873465dda6d56090f2",
+          apiUrl: "https://mysmmapi.com/api/v2",
           updatedAt: Date.now()
         }, { merge: true });
       } catch (e) {}
@@ -983,7 +983,7 @@ async function startServer() {
       if (Array.isArray(rawData) && rawData.length > 0) {
         const processed = formatSmmServices(rawData, 25);
         await saveServicesToFirestore(processed);
-        console.log(`[Startup Service Sync] Successfully synced ${processed.length} services to Firestore from https://themainsmmprovider.com/api/v2.`);
+        console.log(`[Startup Service Sync] Successfully synced ${processed.length} services to Firestore from https://mysmmapi.com/api/v2.`);
       }
     } catch (e) {
       console.warn("[Startup Service Sync] Non-fatal notice:", e);

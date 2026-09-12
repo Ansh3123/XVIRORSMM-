@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Loader2 } from 'lucide-react';
@@ -42,6 +42,23 @@ function FullPageLoader() {
       </div>
     </div>
   );
+}
+
+function AdminPrivateRoute() {
+  const { user, userData, loading } = useAuth();
+  
+  if (loading) {
+    return <FullPageLoader />;
+  }
+
+  const email = (user?.email || userData?.email || '').toLowerCase().trim();
+  const isAllowed = email === 'kalikastore.info@gmail.com' || email.includes('yourr.farhan');
+
+  if (!user || !isAllowed) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
 }
 
 export default function App() {
@@ -92,41 +109,43 @@ export default function App() {
                 </Suspense>
               } />
               
-              <Route path="/admin" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminDashboard />
-                </Suspense>
-              } />
-              <Route path="/admin/services" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminServices />
-                </Suspense>
-              } />
-              <Route path="/admin/deposits" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminDeposits />
-                </Suspense>
-              } />
-              <Route path="/admin/orders" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminOrders />
-                </Suspense>
-              } />
-              <Route path="/admin/users" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminUsers />
-                </Suspense>
-              } />
-              <Route path="/admin/redeem-codes" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminRedeemCodes />
-                </Suspense>
-              } />
-              <Route path="/admin/passwords" element={
-                <Suspense fallback={<PageLoader />}>
-                  <AdminPasswords />
-                </Suspense>
-              } />
+              <Route element={<AdminPrivateRoute />}>
+                <Route path="/admin" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminDashboard />
+                  </Suspense>
+                } />
+                <Route path="/admin/services" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminServices />
+                  </Suspense>
+                } />
+                <Route path="/admin/deposits" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminDeposits />
+                  </Suspense>
+                } />
+                <Route path="/admin/orders" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminOrders />
+                  </Suspense>
+                } />
+                <Route path="/admin/users" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminUsers />
+                  </Suspense>
+                } />
+                <Route path="/admin/redeem-codes" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminRedeemCodes />
+                  </Suspense>
+                } />
+                <Route path="/admin/passwords" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AdminPasswords />
+                  </Suspense>
+                } />
+              </Route>
             </Route>
           </Routes>
         </Suspense>
