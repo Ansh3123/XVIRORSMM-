@@ -196,41 +196,11 @@ async function saveServicesToFirestore(services: any[]): Promise<number> {
 
 async function fetchProviderServices(force = false): Promise<any[]> {
   const now = Date.now();
-  if (!force && cachedProviderServices && cachedProviderServices.length > 0 && (now - lastProviderFetchTime < CACHE_TTL_MS)) {
+  if (!force && cachedProviderServices && cachedProviderServices.length >= 800 && (now - lastProviderFetchTime < CACHE_TTL_MS)) {
     return cachedProviderServices;
   }
 
-  // 1. Check Firestore Cache first if not forcing refresh
-  if (!force) {
-    try {
-      const snap = await dbAdmin.collection("services").get();
-      if (!snap.empty && snap.size > 50) {
-        const firestoreList: any[] = [];
-        snap.forEach(doc => {
-          const d = doc.data();
-          firestoreList.push({
-            service: d.service || d.id,
-            name: d.name,
-            category: d.category,
-            rate: d.rate,
-            min: String(d.minOrder || 10),
-            max: String(d.maxOrder || 100000),
-            type: d.type || 'Default',
-            desc: d.desc || ''
-          });
-        });
-        if (firestoreList.length > 0) {
-          console.log(`[Firestore Services Cache] Loaded ${firestoreList.length} services from Firestore cache for all users.`);
-          cachedProviderServices = firestoreList;
-          lastProviderFetchTime = Date.now();
-          return firestoreList;
-        }
-      }
-    } catch (e) {
-      console.warn("[Firestore Services Cache Read Warning]:", e);
-    }
-  }
-
+  // 1. Always try fetching live from the SMM provider API first to ensure all 863+ services are loaded for all users
   console.log(`[SMM Fetch Provider] Calling provider for live services...`);
   try {
     const data = await callProviderApi("services", {}, 45000);
@@ -239,7 +209,7 @@ async function fetchProviderServices(force = false): Promise<any[]> {
       cachedProviderServices = data;
       lastProviderFetchTime = Date.now();
       
-      // Automatically save to Firestore cache in background so all users & devices have it
+      // Automatically save to Firestore cache in background so all users & devices have all 863+ services
       try {
         saveServicesToFirestore(data).catch(() => {});
       } catch (err) {}
@@ -252,11 +222,40 @@ async function fetchProviderServices(force = false): Promise<any[]> {
     console.warn("[SMM Fetch Provider] Error fetching live services:", err?.message || err);
   }
 
+  // 2. Fallback to Firestore Cache if provider call fails or times out
+  try {
+    const snap = await dbAdmin.collection("services").get();
+    if (!snap.empty) {
+      const firestoreList: any[] = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        firestoreList.push({
+          service: d.service || d.id,
+          name: d.name,
+          category: d.category,
+          rate: d.rate,
+          min: String(d.minOrder || 10),
+          max: String(d.maxOrder || 100000),
+          type: d.type || 'Default',
+          desc: d.desc || ''
+        });
+      });
+      if (firestoreList.length > 0) {
+        console.log(`[Firestore Services Cache] Loaded ${firestoreList.length} services from Firestore cache.`);
+        cachedProviderServices = firestoreList;
+        lastProviderFetchTime = Date.now();
+        return firestoreList;
+      }
+    }
+  } catch (e) {
+    console.warn("[Firestore Services Cache Read Warning]:", e);
+  }
+
   if (cachedProviderServices && cachedProviderServices.length > 0) {
     return cachedProviderServices;
   }
 
-  // Fallback to local comprehensive services if provider times out or is offline
+  // 3. Fallback to local comprehensive services if provider times out or is offline
   try {
     const { ALL_APP_SERVICES } = await import('./src/data/comprehensiveServices.js');
     if (Array.isArray(ALL_APP_SERVICES) && ALL_APP_SERVICES.length > 0) {
@@ -270,10 +269,6 @@ async function fetchProviderServices(force = false): Promise<any[]> {
         max: String(s.maxOrder),
         type: s.type || 'Default'
       }));
-      // Save local fallback to Firestore as well so all users see them
-      try {
-        saveServicesToFirestore(ALL_APP_SERVICES).catch(() => {});
-      } catch (e) {}
       return localList;
     }
   } catch (e) {}
@@ -685,13 +680,14 @@ async function startServer() {
       }
 
       const serviceId = String(service).trim();
+      const resolvedId = await resolveProviderServiceId(serviceId);
       const linkStr = String(link).trim();
       const qtyStr = String(quantity).trim();
 
-      console.log(`[SMM Order Request] service=${serviceId}, qty=${qtyStr}, link=${linkStr}`);
+      console.log(`[SMM Order Request] service=${serviceId} (resolved=${resolvedId}), qty=${qtyStr}, link=${linkStr}`);
 
       let data: any;
-      let usedServiceId = serviceId;
+      let usedServiceId = resolvedId;
       try {
         data = await callProviderApi("add", {
           service: usedServiceId,
